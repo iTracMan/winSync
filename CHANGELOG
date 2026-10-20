@@ -1,0 +1,41 @@
+winSync CHANGELOG
+=================
+
+2026-10-19 - v1.0: Windows / Thetis version of piSync v0.9
+----------------------------------------------------------
+Added
+  * winSync: piSync v0.9 (M0AWS) ported to Windows 10/11 and Thetis (v2.10.3.15, MI0BOT Hermes Lite 2
+    build) in place of piHPSDR. Same design: read-only CAT, reverse proxy plus bridge.js to tune the
+    KiwiSDR/WebSDR, mute on TX, tkinter control window.
+  * winSync/cat.py talks to Thetis's TCP/IP CAT server (127.0.0.1:13013) and polls the five read commands
+    ZZIF; ZZFB; ZZME; ZZRS; ZZXV; as one batch about 10 times a second. Nothing else is ever sent (enforced
+    in code and by tests). The commands and reply formats were checked in Thetis's CATCommands.cs and
+    against a running Thetis (results in README.md).
+  * Follow: Thetis does not report a selected receiver, so the Kiwi follows VFO A while RX2 is off and,
+    with RX2 on, the VFO tuned last. A Follow selector on the page (Auto / VFO A / VFO B), [sync] follow in
+    config.toml and --follow on the command line override this.
+  * TX (for Mute on TX) covers MOX, CAT PTT and TUNE.
+  * Thetis mode numbers map to Kiwi modes, including SAM -> sam; [modes] overrides use Thetis numbers.
+  * winSync.cmd: a double-click launcher. The first run (setup.ps1) finds or installs (winget, per user)
+    Python 3.12, creates .venv, installs aiohttp and adds Desktop and Start menu shortcuts.
+    --setup and --uninstall are also available.
+  * tests/fake_thetis.py: fake Thetis CAT server for tests and manual runs.
+  * winSync logo (winSync-Logo.png) and icons (assets/winsync-icon-*.png, assets/winsync.ico): piSync's
+    artwork with "winSync" and "Thetis <-> WebSDR" lettering; icons of 64 px and below show only the
+    tower and arrows. Rebuilt by tools/make_logo.py (needs Pillow).
+Changed from piSync
+  * piHPSDR-specific commands (AI2;, IF;, FR;, FB;, ZZME; with its ZZMD label quirk) are replaced by the
+    Thetis ZZ commands above.
+  * setup.sh, piSync.service and the Linux installer are replaced by winSync.cmd and setup.ps1.
+  * The server runs without a console window and exits when the winSync window closes or crashes (its
+    stdin is a pipe from the window).
+  * The receiver list is saved in %APPDATA%\winSync\urls.json.
+  * Pages are served under /_winsync/; the bridge object is window.winSync.
+Removed
+  * FLRig support (not needed with Thetis's own CAT server).
+Verified
+  * 30 automated tests pass (tests/, with the fake Thetis CAT server).
+  * Live against Thetis v2.10.3.15 (MI0BOT HL2): state, the Follow selector and the Kiwi proxy work.
+  * Mute on TX, tested live: CW in CWU sent from Thetis's CWX form shows TX in the log while keyed and RX
+    afterwards, and the Kiwi was silent throughout. TUNE in LSB also mutes. The 2-3 s before the Kiwi's audio
+    stops or resumes is the Kiwi's own audio latency, not winSync.

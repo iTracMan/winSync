@@ -1,0 +1,24 @@
+# winSync configuration
+
+[server]
+host = "127.0.0.1"   # use "0.0.0.0" to reach winSync from another machine on your LAN
+port = 8090
+# urls_file = "C:/Users/you/AppData/Roaming/winSync/urls.json"   # where the receiver drop-down list is saved
+
+[cat]
+host = "127.0.0.1"   # where Thetis runs
+port = 13013         # Thetis: Setup > Serial/Network/Midi CAT > Network (TCP/IP CAT server)
+
+[kiwi]
+url = "http://m0cke.proxy.kiwisdr.com:8073/"   # can also be changed from the page
+
+[sync]
+enabled = true
+zoom_on_band_change = true       # re-zoom the Kiwi waterfall to the band when the band changes
+mute_on_tx = false               # default for the "Mute on TX" checkbox (mutes Kiwi audio while transmitting)
+follow = "auto"                  # "auto" = VFO A, or with RX2 on the VFO tuned last; "A" or "B" = always that VFO
+
+# Override the Thetis mode -> Kiwi mode mapping, e.g. use narrow USB for digital (DIGU = 7):
+# Thetis modes: 0 LSB, 1 USB, 2 DSB, 3 CWL, 4 CWU, 5 FM, 6 AM, 7 DIGU, 8 SPEC, 9 DIGL, 10 SAM, 11 DRM
+# [modes]
+# 7 = "usn"

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>winSync</title>
+<link rel="stylesheet" href="/_winsync/static/style.css?v=3">
+</head>
+<body>
+<header>
+  <h1>winSync</h1>
+  <form id="kiwi-form">
+    <div class="combo">
+      <input id="kiwi-url" type="text" placeholder="http://kiwi-host:8073/ or http://websdr-host:8901/" spellcheck="false" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="url-list">
+      <button id="url-toggle" type="button" title="Show previously used receivers" aria-label="Show previously used receivers">&#9662;</button>
+      <ul id="url-list" role="listbox" hidden></ul>
+    </div>
+    <button type="submit">Connect</button>
+  </form>
+  <label class="toggle"><input id="sync-on" type="checkbox" checked> Sync</label>
+  <label class="toggle" title="Mute the Kiwi audio while Thetis is transmitting (MOX, PTT or TUNE), to avoid audio feedback"><input id="mute-tx" type="checkbox"> Mute on TX</label>
+  <label class="toggle" title="Which VFO the Kiwi follows. Auto: VFO A, or with RX2 on whichever VFO you tuned last">Follow
+    <select id="follow"><option value="auto">Auto (last tuned)</option><option value="A">VFO A</option><option value="B">VFO B</option></select></label>
+  <button id="resync" type="button" title="Push the radio's frequency and mode to the Kiwi now">Resync</button>
+  <div class="chips">
+    <span class="chip" id="cat-chip">Thetis: …</span>
+    <span class="chip" id="kiwi-chip">Receiver: …</span>
+  </div>
+  <div class="readout">
+    <span id="rxvfo" title="Receiver and VFO the Kiwi is following">RX1 · VFO A</span>
+    <span id="freq">—</span>
+    <span id="mode">—</span>
+    <span id="band">—</span>
+    <span id="txbadge" hidden>TX</span>
+  </div>
+  <div id="msg" role="status"></div>
+</header>
+<iframe id="kiwi" title="KiwiSDR" allow="autoplay; fullscreen"></iframe>
+<script src="/_winsync/static/app.js?v=3"></script>
+</body>
+</html>

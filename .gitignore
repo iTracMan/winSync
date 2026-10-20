@@ -1,0 +1,7 @@
+# Same exclusions as the winSync zip
+.venv/
+__pycache__/
+.pytest_cache/
+logs/
+*.log
+urls.json

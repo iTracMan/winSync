@@ -169,6 +169,11 @@ A batch of all five takes about 56 ms to answer, against 51 ms for a single comm
 .venv\Scripts\python.exe -m winSync            rem or: --config path\to\config.toml, --follow A|B|auto, -v
 ```
 
+`--control radio|kiwi|both` overrides `[sync] control`. For testing two-way sync, `--dry-run` makes it
+decide as usual but never send anything to the radio (the log says what it would have done), and
+`--diag` makes the page log every Kiwi readback change, every time winSync tunes the Kiwi and every
+change it treats as yours.
+
 ## Tests
 
 ```bat

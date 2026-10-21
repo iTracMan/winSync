@@ -169,7 +169,11 @@ function connectWs() {
     if (m.type === "state") {
       // Choosing Control must not itself move the radio to wherever the Kiwi was left: the Kiwi's
       // current position becomes the starting point and only tuning after this counts.
-      if ((m.control || "radio") !== control) { watch.quiet(Date.now(), 0); diag("Control " + m.control); }
+      if ((m.control || "radio") !== control) {
+        watch.quiet(Date.now(), 0);
+        diag("Control " + m.control);
+        setMsg("");                         // an older "Radio set to ..." no longer applies
+      }
       radio = m; control = m.control || "radio"; render();
     }
   };

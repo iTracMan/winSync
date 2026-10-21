@@ -1,8 +1,8 @@
 winSync CHANGELOG
 =================
 
-Unreleased (branch feature/omnirig)
------------------------------------
+2026-10-21 - v1.2: OmniRig as a read-only source for other radios
+-----------------------------------------------------------------
 Added
   * OmniRig as an alternative, read-only source for conventional radios: [cat] source = "omnirig",
     [omnirig] rig = 1 or 2, --source/--rig, and a Radio selector in the winSync window. winSync/omnirig.py
@@ -25,6 +25,9 @@ Verified, live with OmniRig 1.20 and Thetis v2.10.3.15 as a TS-2000 over com0com
     main object, and OmniRig then disconnects its Rig objects. Fixed (the object is kept while polling),
     with a test. After that: OmniRig Rig 1 online: TS-2000, 7.130000 MHz LSB RX, matching Thetis.
   * OmniRig 1.20 lists only COM1-COM20, so its end of the com0com pair must be COM20 or lower.
+  * Following Thetis's VFO A through OmniRig: frequency, LSB/USB/CWU/AM, MOX and TUNE (both show TX).
+    Tuning the Kiwi never moved the radio. Stopping winSync and closing the window both let OmniRig
+    close by itself (about 2 s later). Then tested by the user before release.
 
 2026-10-21 - v1.1: optional two-way sync (Kiwi -> radio)
 --------------------------------------------------------

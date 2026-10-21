@@ -29,6 +29,10 @@ def main():
                     help="VFO to follow (overrides [sync] follow in the config)")
     ap.add_argument("--control", choices=("radio", "kiwi", "both"),
                     help="two-way sync: which side tunes the other (overrides [sync] control)")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="testing: two-way sync decides as usual but never sends anything to the radio")
+    ap.add_argument("--diag", action="store_true",
+                    help="testing: the page logs every Kiwi readback change and tune to this log")
     ap.add_argument("--exit-with-stdin", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
@@ -41,6 +45,10 @@ def main():
         cfg["sync"]["follow"] = args.follow
     if args.control:
         cfg["sync"]["control"] = args.control
+    cfg["sync"]["dry_run"] = cfg["sync"].get("dry_run", False) or args.dry_run
+    cfg["sync"]["diag"] = cfg["sync"].get("diag", False) or args.diag
+    if cfg["sync"]["dry_run"]:
+        print("winSync: DRY RUN - nothing will be sent to the radio")
     s = cfg["server"]
     print(f"winSync: open http://{s['host']}:{s['port']}/_winsync/")
     web.run_app(build_app(cfg), host=s["host"], port=s["port"], print=None)

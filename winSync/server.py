@@ -84,7 +84,7 @@ DEFAULTS = {
     "cat": {"host": "127.0.0.1", "port": 13013},
     "kiwi": {"url": ""},
     "sync": {"enabled": True, "zoom_on_band_change": True, "mute_on_tx": False, "follow": "auto",
-             "control": "radio"},
+             "control": "radio", "dry_run": False, "diag": False},
     "modes": {},
 }
 
@@ -246,6 +246,14 @@ def build_app(cfg):
         except (ValueError, KeyError, TypeError) as e:
             return web.json_response({"error": str(e)}, status=400)
         mode = kiwi_to_thetis(kiwi_mode, st.cat_mode, cfg["modes"])
+        if cfg["sync"]["dry_run"]:
+            # Testing aid: decide exactly as for real, but never send anything to the radio.
+            reason = st.cat._refusal(st.cat.vfo, freq, mode) if st.cat else "Thetis is not connected"
+            log.info("DRY RUN: Kiwi -> radio %s Hz mode %s: %s", freq, mode,
+                     reason or "would have moved the radio")
+            return web.json_response({"moved": False, "out_of_band": bool(reason) and
+                                      "UK amateur bands" in reason,
+                                      "message": f"Dry run, radio not moved: {reason or 'would have moved it'}"})
         reason = st.cat.request_tune(freq, mode) if st.cat else "Thetis is not connected"
         if reason:
             log.info("Kiwi -> radio: not moved to %s Hz: %s", freq, reason)
@@ -256,6 +264,17 @@ def build_app(cfg):
             "moved": True, "freq_hz": freq, "band": band_for(freq),
             "kiwi_mode": thetis_to_kiwi(result_mode, cfg["modes"]) if result_mode is not None else None,
         })
+
+    async def diag(request):
+        """--diag: the page's own record of what it saw and did, written to this log."""
+        if not same_origin(request) or not cfg["sync"]["diag"]:
+            raise web.HTTPForbidden()
+        try:
+            for line in (await request.json())["events"][:200]:
+                log.info("page: %s", str(line)[:300])
+        except (ValueError, KeyError, TypeError):
+            return web.json_response({"error": "expected {\"events\": [...]}"}, status=400)
+        return web.json_response({})
 
     async def set_target(request):
         if not same_origin(request):
@@ -301,6 +320,7 @@ def build_app(cfg):
     app.router.add_post("/_winsync/api/follow", set_follow)
     app.router.add_post("/_winsync/api/control", set_control)
     app.router.add_post("/_winsync/api/tune", tune)
+    app.router.add_post("/_winsync/api/diag", diag)
     app.router.add_get("/_winsync/api/urls", get_urls)
     app.router.add_put("/_winsync/api/urls", put_urls)
     app.router.add_static("/_winsync/static", STATIC_DIR)

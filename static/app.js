@@ -22,6 +22,27 @@ let radioHoldUntil = 0;
 let tuneInFlight = false;
 const watch = KiwiWatch({});
 
+// --diag (testing): what the page saw and did, sent to the server log once a second.
+let diagOn = false;
+let diagEvents = [];
+let diagLastRb = "";
+function diag(text) {
+  if (diagOn) diagEvents.push(new Date().toISOString().slice(11, 23) + " " + text);
+}
+function diagReadback(b) {
+  if (!diagOn || !b || !b.ready()) return;
+  const rb = b.readback();
+  const s = rb ? rb.freq_hz + " " + rb.mode : "none";
+  if (s !== diagLastRb) { diag("Kiwi readback " + s); diagLastRb = s; }
+}
+function diagFlush() {
+  if (!diagEvents.length) return;
+  const events = diagEvents; diagEvents = [];
+  fetch("/_winsync/api/diag", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ events }),
+  }).catch(() => { /* testing aid only */ });
+}
+
 function bridge() {
   try { return frame.contentWindow.winSync || null; } catch (e) { return null; }
 }
@@ -91,6 +112,7 @@ function apply() {
   if (same && !force) return;
   const bandChanged = !lastApplied || lastApplied.band !== radio.band;
   watch.quiet(Date.now(), SETTLE_MS);      // this tune is ours, not the user's
+  diag("winSync tunes Kiwi " + radio.freq_hz + " " + radio.kiwi_mode + (force ? " (forced)" : ""));
   const res = b.tune(radio.freq_hz, radio.kiwi_mode,
                      { zoomToBand: zoomOnBand && bandChanged && radio.band !== "GEN" });
   force = false;
@@ -109,8 +131,9 @@ function watchKiwi() {
   if (!syncOn || control === "radio" || tuneInFlight) return;
   const b = bridge();
   if (!b || !b.ready()) return;
+  diagReadback(b);
   const change = watch.poll(Date.now(), b.readback());
-  if (change) sendTune(change);
+  if (change) { diag("change seen as the user's: " + change.freq_hz + " " + change.kiwi_mode); sendTune(change); }
 }
 
 async function sendTune(change) {
@@ -122,6 +145,7 @@ async function sendTune(change) {
     });
     const j = await r.json();
     if (!r.ok) { setMsg(j.error || "Could not tune the radio", true); return; }
+    diag("server: " + (j.moved ? "moved radio to " + j.freq_hz : j.message));
     if (j.moved) {
       // The radio will now report this: don't push it back to the Kiwi (it may be in a narrow
       // variant of the mode, e.g. usn, that the radio reports as plain usb).
@@ -145,7 +169,7 @@ function connectWs() {
     if (m.type === "state") {
       // Choosing Control must not itself move the radio to wherever the Kiwi was left: the Kiwi's
       // current position becomes the starting point and only tuning after this counts.
-      if ((m.control || "radio") !== control) watch.quiet(Date.now(), 0);
+      if ((m.control || "radio") !== control) { watch.quiet(Date.now(), 0); diag("Control " + m.control); }
       radio = m; control = m.control || "radio"; render();
     }
   };
@@ -311,6 +335,7 @@ $("control").addEventListener("change", async (e) => {
 });
 $("resync").addEventListener("click", () => { force = true; apply(); });
 frame.addEventListener("load", () => {
+  diag("Kiwi page loaded");
   lastApplied = null; force = true;
   watch.quiet(Date.now(), LOAD_SETTLE_MS);
 });
@@ -321,6 +346,9 @@ frame.addEventListener("load", () => {
   zoomOnBand = cfg.sync.zoom_on_band_change !== false;
   $("sync-on").checked = syncOn;
   muteOnTx = cfg.sync.mute_on_tx === true;
+  diagOn = cfg.sync.diag === true;
+  if (diagOn) setInterval(diagFlush, 1000);
+  if (cfg.sync.dry_run) setMsg("DRY RUN: winSync will not change the radio");
   try {
     const saved = localStorage.getItem("winSync.muteOnTx");
     if (saved !== null) muteOnTx = saved === "1";

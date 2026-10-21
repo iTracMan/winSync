@@ -1,8 +1,8 @@
 winSync CHANGELOG
 =================
 
-Unreleased (branch feature/two-way-sync)
-----------------------------------------
+2026-10-21 - v1.1: optional two-way sync (Kiwi -> radio)
+--------------------------------------------------------
 Added
   * Optional two-way sync: a Control selector on the page and in the winSync window (used when
     winSync starts), [sync] control in config.toml and --control: "radio" (default, unchanged from

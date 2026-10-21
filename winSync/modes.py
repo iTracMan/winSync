@@ -47,3 +47,28 @@ def thetis_to_kiwi(mode, overrides=None):
         table.update({int(k): v for k, v in overrides.items()})
     kiwi = table.get(mode)
     return kiwi if kiwi in KIWI_MODES else None
+
+
+# Kiwi -> radio (two-way sync). Each Kiwi mode -> the plain mode it is a variant of.
+KIWI_FAMILY = {
+    "am": "am", "amn": "am", "amw": "am",
+    "sam": "sam", "sal": "sam", "sau": "sam", "sas": "sam",
+    "lsb": "lsb", "lsn": "lsb", "usb": "usb", "usn": "usb",
+    "cw": "cw", "cwn": "cw", "nbfm": "nbfm", "nnfm": "nbfm",
+}
+
+# Plain Kiwi mode -> Thetis mode number. CW is CWU unless the radio is already in CWL.
+# Only these can ever be set on the radio (see SET_RE in cat.py).
+FAMILY_TO_THETIS = {"lsb": 0, "usb": 1, "cw": 4, "nbfm": 5, "am": 6, "sam": 10}
+
+
+def kiwi_to_thetis(kiwi_mode, current=None, overrides=None):
+    """Thetis mode number to set for a Kiwi mode, or None to leave the radio's mode alone: when the
+    radio's mode already maps to the same kind of Kiwi mode (DIGU and usb, CWL and cw, ...), or the
+    Kiwi mode has no radio equivalent (iq, drm, qam)."""
+    family = KIWI_FAMILY.get(kiwi_mode)
+    if family is None:
+        return None
+    if current is not None and KIWI_FAMILY.get(thetis_to_kiwi(current, overrides)) == family:
+        return None
+    return FAMILY_TO_THETIS[family]

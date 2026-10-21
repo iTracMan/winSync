@@ -15,7 +15,8 @@ Windows 10/11.
 ## How it works
 
 * A small Python server connects to Thetis's **TCP/IP CAT server** (default here **127.0.0.1:13013**)
-  and polls it about 10 times a second. It only ever *reads* from the radio (see "Read-only CAT" below).
+  and polls it about 10 times a second. By default it only ever *reads* from the radio (see "CAT
+  commands" below). Optional two-way sync lets tuning in the Kiwi set the radio's frequency and mode.
 * The same server acts as a reverse proxy for the Kiwi you choose, so the Kiwi page is served from the
   same origin as the winSync control page. That lets winSync call Kiwi's own tuning function
   (`freqmode_set_dsp_kHz`) directly, with no fake keystrokes or clicks.
@@ -47,6 +48,9 @@ If Windows SmartScreen asks about `winSync.cmd` the first time, choose *More inf
 1. Start Thetis with the TCP/IP CAT server on, then tick
    **"Thetis is running and its TCP/IP CAT server is enabled"**. Start stays greyed out until you do.
 2. Press **Start winSync**. Its output scrolls in the field below; **Stop winSync** stops it.
+   **Control** (below the Start button, default `[sync] control` in `config.toml`) chooses two-way sync
+   when winSync starts: Radio controls Kiwi, Kiwi controls radio or Both. While winSync runs it is
+   locked; change it with the Control selector on the page instead.
 3. Press **Open winSync page** to open <http://127.0.0.1:8090/_winsync/> in your default browser
    (only enabled while winSync is running). **Open websdr map** opens
    <https://rx-tx.info/map-sdr-points#close>, handy for finding a receiver.
@@ -63,8 +67,35 @@ drop-down list and saved in `%APPDATA%\winSync\urls.json`.
 
 ## Behaviour notes
 
-* Sync is **radio → Kiwi only**. Tuning inside the Kiwi does not affect Thetis; the next radio change
-  (or **Resync**) puts the Kiwi back on the radio's frequency.
+* **Control** (selector on the page; default `[sync] control` in `config.toml`, or `--control`):
+  * **Radio controls Kiwi** (`radio`, the default, as v1.0): tuning inside the Kiwi does not affect
+    Thetis; the next radio change (or **Resync**) puts the Kiwi back on the radio's frequency.
+  * **Kiwi controls radio** (`kiwi`): tuning the Kiwi sets the followed VFO's frequency and mode in
+    Thetis. Radio changes no longer move the Kiwi (Resync still does).
+  * **Both** (`both`): whichever was tuned last wins.
+
+  The radio is only changed when **all** of these hold, otherwise the page says "Radio not moved: …"
+  and the Kiwi stays where you put it:
+  * the radio is receiving: not MOX, CAT PTT or TUNE, and not within 1 s of the end of a
+    transmission. A change that arrives during TX is dropped, not saved for later;
+  * the frequency is inside the **UK amateur bands**, exactly as Thetis defines them for its UK region
+    (low edge included, high edge excluded): 160m 1.810–2.000, 80m 3.500–3.800, 60m 5.250–5.410,
+    40m 7.000–7.200, 30m 10.100–10.150, 20m 14.000–14.350, 17m 18.068–18.168, 15m 21.000–21.450,
+    12m 24.890–24.990, 10m 28.000–29.700, 6m 50.030–52.000, 2m 144–148 MHz. (Thetis's "Extended"
+    option allows nearly any frequency, so its table is deliberately not used.) The dial frequency
+    is checked, so an SSB signal tuned right at a band edge can still spill a few kHz over it;
+  * only the **followed VFO** is changed (Follow), using `ZZFA`/`ZZMD` for VFO A or `ZZFB`/`ZZME`
+    for VFO B, from a reading of Thetis at most 0.5 s old;
+  * for VFO A: Thetis's MI0BOT "CAT to VFO B" option is seen to be off. With it on, `ZZFA`/`ZZMD`
+    change VFO B, so VFO A is never set from the Kiwi and the page says why. winSync can only tell
+    while VFO A and VFO B are on different frequencies. If a change ever shows up on the other VFO,
+    winSync stops changing the radio until you choose Control again.
+
+  Kiwi modes map back as LSB, USB, CW (CWU, or CWL if the radio is already in CWL), AM, SAM and FM.
+  The radio's mode is left alone when it already matches: Kiwi `usb` doesn't turn DIGU into USB, and
+  narrow variants such as `usn` or `cwn` stay on the Kiwi. Kiwi modes with no radio equivalent
+  (`iq`, `drm`) change only the frequency. A drag across the waterfall sends only where it stops
+  (it must hold still for 0.25 s), and at most about five changes a second are sent.
 * **Follows the VFO in use.** Thetis ties RX1 to VFO A and RX2 to VFO B, but does not report which
   receiver you are using (its `FR;` always answers 0). So with **Follow: Auto (last tuned)** the Kiwi
   follows VFO A while RX2 is off, and with RX2 on whichever VFO you tuned (frequency or mode) last.
@@ -89,10 +120,24 @@ drop-down list and saved in `%APPDATA%\winSync\urls.json`.
   enter, so don't expose it to untrusted networks.
 * Please respect each Kiwi operator's time limits and rules.
 
-## Read-only CAT
+## CAT commands
 
-winSync sends exactly five commands, all reads, as one batch per poll: `ZZIF;ZZFB;ZZME;ZZRS;ZZXV;`.
-`winSync/cat.py` refuses to send anything else, and a test checks this. Each command was checked in
+With Control on **Radio controls Kiwi** (the default) winSync sends exactly five commands, all reads,
+as one batch per poll: `ZZIF;ZZFB;ZZME;ZZRS;ZZXV;`. `winSync/cat.py` refuses to send anything else,
+and a test checks this. With two-way sync on, the batch also reads `ZZFA;` (a pure read that returns
+VFO A, or VFO B when "CAT to VFO B" is on), and the only other commands that can ever be written are:
+
+| Command | Sets |
+|---|---|
+| `ZZFA` + 11 digits | VFO A frequency in Hz (only while following VFO A) |
+| `ZZFB` + 11 digits | VFO B frequency in Hz (only while following VFO B) |
+| `ZZMD` + `00` `01` `03` `04` `05` `06` or `10` | RX1 mode: LSB, USB, CWL, CWU, FM, AM or SAM |
+| `ZZME` + the same | RX2 mode |
+
+Each one is checked again just before it is written: syntax, VFO, UK band, receive state and
+freshness. Thetis's other 400-odd CAT commands are refused, whether bare or with parameters (a test
+tries every one of them), so DSB, SPEC, DRM and DIG modes are never set either. The rest of this
+section describes the reads. Each command was checked in
 Thetis's source (`CATCommands.cs`) to be a pure read when sent with no parameter. Not every Thetis command
 that looks like a read is one: `ZZXU;` raises XIT and `ZZZZ;` closes the CAT port, for example. winSync
 never sends `TX;`, `ZZTX1;`, `ZZTU1;` or any command that changes the radio, and it does not switch
@@ -127,13 +172,22 @@ A batch of all five takes about 56 ms to answer, against 51 ms for a single comm
 .venv\Scripts\python.exe -m winSync            rem or: --config path\to\config.toml, --follow A|B|auto, -v
 ```
 
+`--control radio|kiwi|both` overrides `[sync] control`. For testing two-way sync, `--dry-run` makes it
+decide as usual but never send anything to the radio (the log says what it would have done), and
+`--diag` makes the page log every Kiwi readback change, every time winSync tunes the Kiwi and every
+change it treats as yours.
+
 ## Tests
 
 ```bat
 .venv\Scripts\python.exe -m pip install pytest
 .venv\Scripts\python.exe -m pytest tests
 node tests\test_bridge.js      rem bridge.js logic against stubbed Kiwi and WebSDR pages (needs Node.js)
+node tests\test_kiwiwatch.js   rem Kiwi -> radio change detection
+node tests\page_e2e.js         rem the real page against a real server and the fake Thetis (ports 13114, 8091)
 ```
+
+Node.js LTS: `winget install OpenJS.NodeJS.LTS`.
 
 The logo and icons are made from piSync's artwork by `tools\make_logo.py`
 (`.venv\Scripts\python.exe -m pip install pillow` first; it reads `..\piSync-Logo.png` or a path you give it).

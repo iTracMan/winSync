@@ -7,7 +7,7 @@ import aiohttp
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from winSync.server import build_app, load_config
+from winSync.server import STATE, build_app, load_config
 from tests.fake_thetis import FakeThetis
 
 KIWI_HTML = "<html><head><title>Fake Kiwi</title></head><body>hi</body></html>"
@@ -191,5 +191,109 @@ def test_urls_persist_across_restart(tmp_path):
         await client.start_server()
         assert (await (await client.get("/_winsync/api/urls")).json())["urls"] == []
         await client.close()
+
+    run(scenario())
+
+
+def test_kiwi_to_radio_api():
+    async def scenario():
+        fake = FakeThetis(freq=7_100_000, mode=0)
+        fake.freq_b = 3_700_000                   # A and B differ, so CAT to VFO B can be checked
+        await fake.start()
+        kiwi, client = await make_stack(fake.port)
+        ws = await client.ws_connect("/_winsync/ws")
+
+        async def wait_for(pred):
+            for _ in range(100):
+                msg = json.loads((await asyncio.wait_for(ws.receive(), 3)).data)
+                if pred(msg):
+                    return msg
+            raise AssertionError("condition never met")
+
+        m = await wait_for(lambda m: m["freq_hz"] == 7_100_000)
+        assert m["control"] == "radio" and m["control_note"] is None
+
+        # Default: radio controls Kiwi, so the radio is never moved
+        r = await client.post("/_winsync/api/tune", json={"freq_hz": 7_074_000, "kiwi_mode": "usb"})
+        j = await r.json()
+        assert j["moved"] is False and "Radio controls Kiwi" in j["message"]
+
+        r = await client.post("/_winsync/api/control", json={"control": "both"})
+        assert (await r.json())["control"] == "both"
+        await wait_for(lambda m: m["control"] == "both")
+        for _ in range(100):                      # ZZFA; polled: CAT to VFO B seen to be off
+            if client.app[STATE].cat.cat_to_b is False:
+                break
+            await asyncio.sleep(0.02)
+
+        r = await client.post("/_winsync/api/tune", json={"freq_hz": 7_074_000, "kiwi_mode": "usn"})
+        j = await r.json()
+        assert j == {"moved": True, "freq_hz": 7_074_000, "band": "40m", "kiwi_mode": "usb"}
+        m = await wait_for(lambda m: m["freq_hz"] == 7_074_000 and m["mode_label"] == "USB")
+        assert fake.freq_a == 7_074_000 and fake.mode_a == 1
+
+        # Outside the UK bands: Kiwi only, and the page is told why
+        r = await client.post("/_winsync/api/tune", json={"freq_hz": 7_300_000, "kiwi_mode": "usb"})
+        j = await r.json()
+        assert j["moved"] is False and j["out_of_band"] is True
+        assert j["message"] == "Radio not moved: 7.300000 MHz is outside the UK amateur bands"
+        assert fake.freq_a == 7_074_000
+
+        # TX: refused
+        fake.set_state(mox=True)
+        await wait_for(lambda m: m["tx"] is True)
+        r = await client.post("/_winsync/api/tune", json={"freq_hz": 7_080_000})
+        assert (await r.json())["message"] == "Radio not moved: the radio is transmitting"
+        fake.set_state(mox=False)
+
+        for bad in ({"freq_hz": "7074000"}, {"freq_hz": 7074000.5}, {"freq_hz": True}, {},
+                    {"freq_hz": 7_074_000, "kiwi_mode": 3}):
+            assert (await client.post("/_winsync/api/tune", json=bad)).status == 400
+        assert (await client.post("/_winsync/api/control", json={"control": "x"})).status == 400
+        evil = {"Origin": "http://evil.example"}
+        assert (await client.post("/_winsync/api/tune", json={"freq_hz": 7_074_000},
+                                  headers=evil)).status == 403
+        assert (await client.post("/_winsync/api/control", json={"control": "radio"},
+                                  headers=evil)).status == 403
+        assert fake.freq_a == 7_074_000
+
+        await ws.close()
+        await client.close()
+        await kiwi.close()
+        await fake.stop()
+
+    run(scenario())
+
+
+def test_dry_run_never_sends_and_diag_is_opt_in():
+    async def scenario():
+        fake = FakeThetis(freq=7_100_000, mode=0)
+        fake.freq_b = 3_700_000
+        await fake.start()
+        kiwi, client = await make_stack(fake.port)
+        st = client.app[STATE]
+        st.cfg["sync"]["dry_run"] = True
+        await client.post("/_winsync/api/control", json={"control": "both"})
+        for _ in range(100):
+            if st.cat.cat_to_b is False:
+                break
+            await asyncio.sleep(0.02)
+        r = await client.post("/_winsync/api/tune", json={"freq_hz": 7_074_000, "kiwi_mode": "lsb"})
+        j = await r.json()
+        assert j["moved"] is False and j["message"] == "Dry run, radio not moved: would have moved it"
+        r = await client.post("/_winsync/api/tune", json={"freq_hz": 7_300_000, "kiwi_mode": "lsb"})
+        assert (await r.json())["out_of_band"] is True
+        await asyncio.sleep(0.3)
+        assert fake.freq_a == 7_100_000
+        assert not [c for c in fake.received if c.startswith(("ZZFA0", "ZZMD0"))]
+
+        assert (await client.post("/_winsync/api/diag", json={"events": ["x"]})).status == 403
+        st.cfg["sync"]["diag"] = True
+        assert (await client.post("/_winsync/api/diag", json={"events": ["x"]})).status == 200
+        assert (await client.post("/_winsync/api/diag", json={"events": ["x"]},
+                                  headers={"Origin": "http://evil.example"})).status == 403
+        await client.close()
+        await kiwi.close()
+        await fake.stop()
 
     run(scenario())

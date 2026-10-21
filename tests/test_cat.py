@@ -4,7 +4,7 @@ import re
 import pytest
 
 from winSync.bands import band_for
-from winSync.cat import POLL_BATCH, SAFE_COMMANDS, CatClient, parse_frame, split_frames
+from winSync.cat import CONTROL_BATCH, POLL_BATCH, SAFE_COMMANDS, CatClient, parse_frame, split_frames
 from winSync.modes import thetis_to_kiwi
 from tests.fake_thetis import BANNER, FakeThetis
 
@@ -42,9 +42,12 @@ def test_bands_and_modes():
 
 
 def test_whitelist_is_reads_only():
-    """Only the reads checked in Thetis's source; never a command with a parameter."""
-    assert SAFE_COMMANDS == {b"ZZIF;", b"ZZFB;", b"ZZME;", b"ZZRS;", b"ZZXV;"}
+    """Only the reads checked in Thetis's source; never a command with a parameter. (ZZFA; with
+    no parameter returns VFO A, through the CAT to VFO B redirect; polled only with control on.)"""
+    assert SAFE_COMMANDS == {b"ZZIF;", b"ZZFB;", b"ZZME;", b"ZZRS;", b"ZZXV;", b"ZZFA;"}
     assert set(re.findall(rb"[^;]*;", POLL_BATCH)) <= SAFE_COMMANDS
+    assert set(re.findall(rb"[^;]*;", CONTROL_BATCH)) <= SAFE_COMMANDS
+    assert b"ZZFA;" not in POLL_BATCH                    # radio-only polling is unchanged from v1.0
 
 
 async def until(pred, what="condition"):

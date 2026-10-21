@@ -26,3 +26,31 @@ def band_for(freq_hz):
         if lo <= freq_hz <= hi:
             return name
     return "GEN"
+
+
+# UK amateur bands exactly as Thetis defines them for its UK region (clsBandStackManager.cs,
+# FRSRegion.UK, which Thetis also uses to decide whether it may transmit): low <= f < high, in Hz.
+# Kiwi -> radio changes are only made inside these. Thetis's "Extended" option swaps in a table
+# covering nearly everything, so it is deliberately not used here.
+UK_BANDS = [
+    ("160m", 1_810_000, 2_000_000),
+    ("80m", 3_500_000, 3_800_000),
+    ("60m", 5_250_000, 5_410_000),
+    ("40m", 7_000_000, 7_200_000),
+    ("30m", 10_100_000, 10_150_000),
+    ("20m", 14_000_000, 14_350_000),
+    ("17m", 18_068_000, 18_168_000),
+    ("15m", 21_000_000, 21_450_000),
+    ("12m", 24_890_000, 24_990_000),
+    ("10m", 28_000_000, 29_700_000),
+    ("6m", 50_030_000, 52_000_000),
+    ("2m", 144_000_000, 148_000_000),
+]
+
+
+def uk_band_for(freq_hz):
+    """Return the UK amateur band containing freq_hz (Thetis UK region), or None."""
+    for name, lo, hi in UK_BANDS:
+        if lo <= freq_hz < hi:
+            return name
+    return None

@@ -17,6 +17,9 @@ enabled = true
 zoom_on_band_change = true       # re-zoom the Kiwi waterfall to the band when the band changes
 mute_on_tx = false               # default for the "Mute on TX" checkbox (mutes Kiwi audio while transmitting)
 follow = "auto"                  # "auto" = VFO A, or with RX2 on the VFO tuned last; "A" or "B" = always that VFO
+control = "radio"                # "radio" = radio tunes the Kiwi (one way, as v1.0); "kiwi" = tuning the Kiwi
+                                 # sets the radio's followed VFO; "both" = whichever was tuned last.
+                                 # The radio is only changed in receive, inside the UK amateur bands.
 
 # Override the Thetis mode -> Kiwi mode mapping, e.g. use narrow USB for digital (DIGU = 7):
 # Thetis modes: 0 LSB, 1 USB, 2 DSB, 3 CWL, 4 CWU, 5 FM, 6 AM, 7 DIGU, 8 SPEC, 9 DIGL, 10 SAM, 11 DRM

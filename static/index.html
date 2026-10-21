@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>winSync</title>
-<link rel="stylesheet" href="/_winsync/static/style.css?v=3">
+<link rel="stylesheet" href="/_winsync/static/style.css?v=4">
 </head>
 <body>
 <header>
@@ -21,6 +21,8 @@
   <label class="toggle" title="Mute the Kiwi audio while Thetis is transmitting (MOX, PTT or TUNE), to avoid audio feedback"><input id="mute-tx" type="checkbox"> Mute on TX</label>
   <label class="toggle" title="Which VFO the Kiwi follows. Auto: VFO A, or with RX2 on whichever VFO you tuned last">Follow
     <select id="follow"><option value="auto">Auto (last tuned)</option><option value="A">VFO A</option><option value="B">VFO B</option></select></label>
+  <label class="toggle" title="Which side tunes the other. The radio is only changed while receiving, and only inside the UK amateur bands">Control
+    <select id="control"><option value="radio">Radio controls Kiwi</option><option value="kiwi">Kiwi controls radio</option><option value="both">Both</option></select></label>
   <button id="resync" type="button" title="Push the radio's frequency and mode to the Kiwi now">Resync</button>
   <div class="chips">
     <span class="chip" id="cat-chip">Thetis: …</span>
@@ -33,9 +35,11 @@
     <span id="band">—</span>
     <span id="txbadge" hidden>TX</span>
   </div>
+  <div id="control-note" hidden></div>
   <div id="msg" role="status"></div>
 </header>
 <iframe id="kiwi" title="KiwiSDR" allow="autoplay; fullscreen"></iframe>
-<script src="/_winsync/static/app.js?v=3"></script>
+<script src="/_winsync/static/kiwiwatch.js?v=4"></script>
+<script src="/_winsync/static/app.js?v=4"></script>
 </body>
 </html>

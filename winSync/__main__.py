@@ -29,6 +29,10 @@ def main():
                     help="VFO to follow (overrides [sync] follow in the config)")
     ap.add_argument("--control", choices=("radio", "kiwi", "both"),
                     help="two-way sync: which side tunes the other (overrides [sync] control)")
+    ap.add_argument("--source", choices=("thetis", "omnirig"),
+                    help="where the radio's state comes from (overrides [cat] source)")
+    ap.add_argument("--rig", type=int, choices=(1, 2),
+                    help="OmniRig rig number (overrides [omnirig] rig)")
     ap.add_argument("--dry-run", action="store_true",
                     help="testing: two-way sync decides as usual but never sends anything to the radio")
     ap.add_argument("--diag", action="store_true",
@@ -45,6 +49,10 @@ def main():
         cfg["sync"]["follow"] = args.follow
     if args.control:
         cfg["sync"]["control"] = args.control
+    if args.source:
+        cfg["cat"]["source"] = args.source
+    if args.rig:
+        cfg["omnirig"]["rig"] = args.rig
     cfg["sync"]["dry_run"] = cfg["sync"].get("dry_run", False) or args.dry_run
     cfg["sync"]["diag"] = cfg["sync"].get("diag", False) or args.diag
     if cfg["sync"]["dry_run"]:

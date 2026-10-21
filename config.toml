@@ -6,8 +6,12 @@ port = 8090
 # urls_file = "C:/Users/you/AppData/Roaming/winSync/urls.json"   # where the receiver drop-down list is saved
 
 [cat]
+source = "thetis"    # "thetis" (TCP/IP CAT below) or "omnirig" (any radio OmniRig supports, read-only)
 host = "127.0.0.1"   # where Thetis runs
 port = 13013         # Thetis: Setup > Serial/Network/Midi CAT > Network (TCP/IP CAT server)
+
+[omnirig]
+rig = 1              # OmniRig's Rig 1 or Rig 2 (used with source = "omnirig")
 
 [kiwi]
 url = "http://m0cke.proxy.kiwisdr.com:8073/"   # can also be changed from the page

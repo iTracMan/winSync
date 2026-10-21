@@ -12,6 +12,7 @@ from yarl import URL
 
 from .bands import band_for
 from .cat import CONTROL_MODES, FOLLOW_MODES, CatClient
+from .omnirig import READ_ONLY, OmniRigSource
 from .modes import THETIS_LABELS, kiwi_to_thetis, thetis_to_kiwi
 from .proxy import SESSION, normalize_target, proxy_http, proxy_ws
 
@@ -69,7 +70,11 @@ class State:
         self.vfo = 0           # VFO being followed: 0 = A / RX1, 1 = B / RX2
         self.rx2_on = False
         self.follow = cfg["sync"]["follow"] if cfg["sync"]["follow"] in FOLLOW_MODES else "auto"
+        self.source = "omnirig" if cfg["cat"].get("source") == "omnirig" else "thetis"
         self.control = cfg["sync"]["control"] if cfg["sync"]["control"] in CONTROL_MODES else "radio"
+        if self.source == "omnirig" and self.control != "radio":
+            log.warning("control = %r ignored: %s", self.control, READ_ONLY)
+            self.control = "radio"
         self.control_note = None   # lasting reason the Kiwi can't change the radio
         self.cat = None
         self.target = normalize_target(cfg["kiwi"]["url"]) if cfg["kiwi"]["url"] else None
@@ -81,7 +86,8 @@ STATE = web.AppKey("state", State)
 
 DEFAULTS = {
     "server": {"host": "127.0.0.1", "port": 8090, "urls_file": ""},
-    "cat": {"host": "127.0.0.1", "port": 13013},
+    "cat": {"source": "thetis", "host": "127.0.0.1", "port": 13013},
+    "omnirig": {"rig": 1},
     "kiwi": {"url": ""},
     "sync": {"enabled": True, "zoom_on_band_change": True, "mute_on_tx": False, "follow": "auto",
              "control": "radio", "dry_run": False, "diag": False},
@@ -117,6 +123,7 @@ def snapshot(st):
         "rx2_on": st.rx2_on,
         "follow": st.follow,
         "control": st.control,
+        "source": st.source,
         "control_note": st.control_note,
         "freq_hz": freq,
         "cat_mode": mode,
@@ -162,15 +169,20 @@ def build_app(cfg):
 
     def on_note(note):
         st.control_note = note
-        if note:
+        if note and st.source == "thetis":     # OmniRig logs its own notes
             log.warning("Kiwi -> radio: %s", note)
         asyncio.create_task(broadcast(st))
 
     async def startup(app):
         app[SESSION] = aiohttp.ClientSession(auto_decompress=False,
                                              cookie_jar=aiohttp.DummyCookieJar())
-        st.cat = cat = CatClient(cfg["cat"]["host"], cfg["cat"]["port"], on_state, on_status,
-                                 follow=st.follow, control=st.control, on_note=on_note)
+        if st.source == "omnirig":
+            log.info("CAT source: OmniRig, Rig %s (read-only)", cfg["omnirig"]["rig"])
+            st.cat = cat = OmniRigSource(cfg["omnirig"]["rig"], on_state, on_status,
+                                         follow=st.follow, on_note=on_note)
+        else:
+            st.cat = cat = CatClient(cfg["cat"]["host"], cfg["cat"]["port"], on_state, on_status,
+                                     follow=st.follow, control=st.control, on_note=on_note)
         cat.start()
         yield
         await cat.stop()
@@ -196,7 +208,8 @@ def build_app(cfg):
         return ws
 
     async def get_config(request):
-        return web.json_response({"target": st.target, "sync": cfg["sync"], "cat": cfg["cat"]})
+        return web.json_response({"target": st.target, "sync": cfg["sync"], "cat": cfg["cat"],
+                                  "source": st.source})
 
     async def set_follow(request):
         if not same_origin(request):
@@ -223,6 +236,8 @@ def build_app(cfg):
                 raise ValueError(f"control must be one of {', '.join(CONTROL_MODES)}")
         except (ValueError, KeyError, TypeError) as e:
             return web.json_response({"error": str(e)}, status=400)
+        if st.source == "omnirig" and control != "radio":
+            return web.json_response({"error": READ_ONLY}, status=400)
         st.control = control
         log.info("control: %s", {"radio": "radio controls Kiwi", "kiwi": "Kiwi controls radio",
                                  "both": "both ways"}[control])
@@ -248,13 +263,13 @@ def build_app(cfg):
         mode = kiwi_to_thetis(kiwi_mode, st.cat_mode, cfg["modes"])
         if cfg["sync"]["dry_run"]:
             # Testing aid: decide exactly as for real, but never send anything to the radio.
-            reason = st.cat._refusal(st.cat.vfo, freq, mode) if st.cat else "Thetis is not connected"
+            reason = st.cat._refusal(st.cat.vfo, freq, mode) if st.cat else "the radio is not connected"
             log.info("DRY RUN: Kiwi -> radio %s Hz mode %s: %s", freq, mode,
                      reason or "would have moved the radio")
             return web.json_response({"moved": False, "out_of_band": bool(reason) and
                                       "UK amateur bands" in reason,
                                       "message": f"Dry run, radio not moved: {reason or 'would have moved it'}"})
-        reason = st.cat.request_tune(freq, mode) if st.cat else "Thetis is not connected"
+        reason = st.cat.request_tune(freq, mode) if st.cat else "the radio is not connected"
         if reason:
             log.info("Kiwi -> radio: not moved to %s Hz: %s", freq, reason)
             return web.json_response({"moved": False, "out_of_band": "UK amateur bands" in reason,

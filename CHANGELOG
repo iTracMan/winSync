@@ -1,6 +1,19 @@
 winSync CHANGELOG
 =================
 
+Unreleased (branch feature/omnirig)
+-----------------------------------
+Added
+  * OmniRig as an alternative, read-only source for conventional radios: [cat] source = "omnirig",
+    [omnirig] rig = 1 or 2, --source/--rig, and a Radio selector in the winSync window. winSync/omnirig.py
+    reads only Status, StatusStr, RigType, ReadableParams, Freq, FreqA, FreqB, Vfo, Mode and Tx through
+    COM (pywin32, now in requirements.txt) and never sets a property or calls a method (ReadOnlyRig,
+    tests/test_omnirig.py with a fake OmniRig that records every access). Two-way sync is off with
+    OmniRig: Control is fixed to Radio controls Kiwi.
+  * The page shows "OmniRig: connected" and OmniRig's state (not installed, rig not responding, no TX
+    reporting, unknown mode).
+  * README: how to test OmniRig with Thetis as a TS-2000 over a com0com virtual COM port pair.
+
 2026-10-21 - v1.1: optional two-way sync (Kiwi -> radio)
 --------------------------------------------------------
 Added

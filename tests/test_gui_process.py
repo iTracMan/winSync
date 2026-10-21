@@ -225,3 +225,31 @@ def test_read_version(tmp_path):
     assert read_version(tmp_path) == "v0.30"
     (tmp_path / "VERSION").write_text("")
     assert read_version(tmp_path) is None
+
+
+def test_source_and_rig_flags(tmp_path, monkeypatch):
+    seen = []
+    import winSync.gui as gui
+    monkeypatch.setattr(gui.subprocess, "Popen",
+                        lambda argv, **kw: seen.append(argv) or (_ for _ in ()).throw(OSError("stop")))
+    sp = ServerProcess(root=tmp_path)
+    monkeypatch.setattr(sp, "venv_python", lambda: tmp_path / "python.exe")
+    for source, rig in gui.SOURCE_CHOICES:
+        with pytest.raises(OSError):
+            sp.start(control="radio", source=source, rig=rig)
+    assert seen[0][-4:] == ["--control", "radio", "--source", "thetis"]
+    assert seen[1][-4:] == ["--source", "omnirig", "--rig", "1"]
+    assert seen[2][-4:] == ["--source", "omnirig", "--rig", "2"]
+
+
+def test_read_source(tmp_path):
+    from winSync.gui import SOURCE_CHOICES, read_source
+    assert read_source(tmp_path) == ("thetis", None)
+    cases = {'[cat]\nsource = "thetis"\n': ("thetis", None),
+             '[cat]\nsource = "omnirig"\n': ("omnirig", 1),
+             '[cat]\nsource = "omnirig"\n[omnirig]\nrig = 2\n': ("omnirig", 2),
+             '[cat]\nsource = "omnirig"\n[omnirig]\nrig = 7\n': ("omnirig", 1),
+             '[cat]\nsource = "flrig"\n': ("thetis", None)}
+    for text, expected in cases.items():
+        (tmp_path / "config.toml").write_text(text)
+        assert read_source(tmp_path) == expected and expected in SOURCE_CHOICES

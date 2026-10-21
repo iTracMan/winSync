@@ -20,6 +20,9 @@ DEFAULT_WEB_PORT = 8090
 WEBSDR_MAP_URL = "https://rx-tx.info/map-sdr-points#close"
 # Two-way sync: [sync] control / --control value -> label in the window (and on the page)
 CONTROL_CHOICES = {"radio": "Radio controls Kiwi", "kiwi": "Kiwi controls radio", "both": "Both"}
+# Where the radio's state comes from: ([cat] source, [omnirig] rig) -> label in the window
+SOURCE_CHOICES = {("thetis", None): "Thetis", ("omnirig", 1): "OmniRig Rig 1",
+                  ("omnirig", 2): "OmniRig Rig 2"}
 MAX_LOG_LINES = 5000
 POLL_MS = 100
 # "Address already in use" as aiohttp reports it on Windows (WSAEADDRINUSE) and elsewhere
@@ -58,7 +61,7 @@ class ServerProcess:
     def running(self):
         return self.proc is not None and self.proc.poll() is None
 
-    def start(self, follow=None, control=None):
+    def start(self, follow=None, control=None, source=None, rig=None):
         if self.running:
             return
         argv = self.argv
@@ -73,6 +76,10 @@ class ServerProcess:
                 argv += ["--follow", follow]
             if control:
                 argv += ["--control", control]
+            if source:
+                argv += ["--source", source]
+            if rig:
+                argv += ["--rig", str(rig)]
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # no console window for the server
         env = dict(os.environ, PYTHONIOENCODING="utf-8")
         self.events = q = queue.Queue()
@@ -133,6 +140,16 @@ def read_control(root=ROOT):
     """[sync] control from config.toml: "radio", "kiwi" or "both" ("radio" if unset or invalid)."""
     control = read_config(root).get("sync", {}).get("control", "radio")
     return control if control in CONTROL_CHOICES else "radio"
+
+
+def read_source(root=ROOT):
+    """([cat] source, [omnirig] rig) from config.toml, as a key of SOURCE_CHOICES (Thetis if unset
+    or invalid)."""
+    cfg = read_config(root)
+    if cfg.get("cat", {}).get("source") == "omnirig":
+        rig = cfg.get("omnirig", {}).get("rig", 1)
+        return ("omnirig", rig if rig in (1, 2) else 1)
+    return ("thetis", None)
 
 
 def read_cat_port(root=ROOT):
@@ -285,18 +302,16 @@ class App:
         if self.version:
             tk.Label(title_row, text=self.version, bg=PANEL, fg=MUTED,
                      font=("TkDefaultFont", 10)).pack(side="left", padx=(6, 0), pady=(6, 0))
-        tk.Label(titles, text="Keeps a KiwiSDR or WebSDR tuned to Thetis", bg=PANEL, fg=MUTED
+        tk.Label(titles, text="Keeps a KiwiSDR or WebSDR tuned to Thetis, or a radio through OmniRig", bg=PANEL, fg=MUTED
                  ).pack(anchor="w")
 
-        # Step 1: the user confirms Thetis is running
+        # Step 1: the user confirms Thetis (or OmniRig) is running
         self.port = read_cat_port()
         self.confirmed = tk.BooleanVar(value=False)
         self.check = tk.Checkbutton(
             win, variable=self.confirmed, command=self._update_buttons, bg=BG, fg=TEXT,
             selectcolor=PANEL, activebackground=BG, activeforeground=TEXT, highlightthickness=0,
-            anchor="w", justify="left",
-            text="Thetis is running and its TCP/IP CAT server is enabled "
-                 f"(Setup > Serial/Network/Midi CAT > Network, port {self.port})")
+            anchor="w", justify="left")
         self.check.pack(fill="x", padx=12, pady=(10, 4))
 
         # Step 2: start / stop
@@ -309,17 +324,24 @@ class App:
         # Two-way sync, used when winSync starts (the page's Control selector changes it while running)
         ctl_row = tk.Frame(win, bg=BG)
         ctl_row.pack(fill="x", padx=12, pady=(2, 4), after=bar)
+
+        def menu(label, var, choices, width, command=None, padx=(0, 6)):
+            tk.Label(ctl_row, text=label, bg=BG, fg=TEXT).pack(side="left", padx=padx)
+            m = tk.OptionMenu(ctl_row, var, *choices, command=command)
+            m.configure(bg=BTN, fg=TEXT, activebackground="#2f3b50", activeforeground=TEXT,
+                        disabledforeground=MUTED, relief="flat", highlightthickness=0,
+                        width=width, anchor="w")
+            m["menu"].configure(bg=PANEL, fg=TEXT, activebackground="#2f3b50", activeforeground=TEXT)
+            m.pack(side="left")
+            return m
+        # Where the radio's state comes from: Thetis's TCP/IP CAT, or OmniRig (read-only)
+        self.source = tk.StringVar(value=SOURCE_CHOICES[read_source()])
+        self.source_menu = menu("Radio", self.source, SOURCE_CHOICES.values(), 13,
+                                command=lambda _: self._source_changed())
         self.control = tk.StringVar(value=CONTROL_CHOICES[read_control()])
-        tk.Label(ctl_row, text="Control", bg=BG, fg=TEXT).pack(side="left", padx=(0, 6))
-        self.control_menu = tk.OptionMenu(ctl_row, self.control, *CONTROL_CHOICES.values())
-        self.control_menu.configure(bg=BTN, fg=TEXT, activebackground="#2f3b50", activeforeground=TEXT,
-                                    disabledforeground=MUTED, relief="flat", highlightthickness=0,
-                                    width=18, anchor="w")
-        self.control_menu["menu"].configure(bg=PANEL, fg=TEXT, activebackground="#2f3b50",
-                                            activeforeground=TEXT)
-        self.control_menu.pack(side="left")
-        tk.Label(ctl_row, text="used when winSync starts; change it on the page while running",
-                 bg=BG, fg=MUTED).pack(side="left", padx=10)
+        self.control_menu = menu("Control", self.control, CONTROL_CHOICES.values(), 18,
+                                 padx=(14, 6))
+        tk.Label(ctl_row, text="used when winSync starts", bg=BG, fg=MUTED).pack(side="left", padx=10)
         self.status = tk.Label(bar, text="Stopped", bg=BG, fg=MUTED, font=("TkDefaultFont", 11, "bold"))
         self.status.pack(side="left", padx=14)
         tk.Button(bar, text="Clear", command=self._clear, bg=BTN, fg=TEXT, activebackground="#2f3b50",
@@ -348,9 +370,9 @@ class App:
 
         win.protocol("WM_DELETE_WINDOW", self._close)
         atexit.register(lambda: self.server.stop(blocking=True))
-        self._update_buttons()
-        self._append("Tick the box above once Thetis is running with its TCP/IP CAT server on, "
-                     "then press Start winSync.", "note")
+        self._source_changed(first=True)
+        self._append("Tick the box above once Thetis is running with its TCP/IP CAT server on "
+                     "(or OmniRig is set up for your radio), then press Start winSync.", "note")
         win.after(POLL_MS, self._poll)
 
     def _load_icons(self):
@@ -369,6 +391,24 @@ class App:
             self.win.iconphoto(True, *self.icons)
 
     # --- state -------------------------------------------------------------------------------
+    def _source_key(self):
+        return next(k for k, v in SOURCE_CHOICES.items() if v == self.source.get())
+
+    def _source_changed(self, first=False):
+        """The checkbox says what to confirm for this source. OmniRig is read-only, so Control is
+        fixed to Radio controls Kiwi."""
+        source, rig = self._source_key()
+        if source == "omnirig":
+            self.check.configure(text=f"OmniRig is installed and its Rig {rig} is set up for your "
+                                      "radio (OmniRig Settings: rig type, COM port, baud rate)")
+            self.control.set(CONTROL_CHOICES["radio"])
+        else:
+            self.check.configure(text="Thetis is running and its TCP/IP CAT server is enabled "
+                                      f"(Setup > Serial/Network/Midi CAT > Network, port {self.port})")
+        if not first:
+            self.confirmed.set(False)    # confirm again for the new source
+        self._update_buttons()
+
     def _update_buttons(self):
         running = self.server.running
         if self.stopping:
@@ -379,7 +419,10 @@ class App:
             self.button.configure(text="Start winSync",
                                   state="normal" if self.confirmed.get() else "disabled")
         self.check.configure(state="disabled" if running or self.stopping else "normal")
-        self.control_menu.configure(state="disabled" if running or self.stopping else "normal")
+        locked = running or self.stopping
+        self.source_menu.configure(state="disabled" if locked else "normal")
+        omnirig = self._source_key()[0] == "omnirig"
+        self.control_menu.configure(state="disabled" if locked or omnirig else "normal")
         self.open_button.configure(state="normal" if running and not self.stopping else "disabled")
 
     def _open_page(self):
@@ -409,8 +452,9 @@ class App:
             self.server.stop()
         else:
             control = next(k for k, v in CONTROL_CHOICES.items() if v == self.control.get())
+            source, rig = self._source_key()
             try:
-                self.server.start(control=control)
+                self.server.start(control=control, source=source, rig=rig)
             except SetupError as e:
                 self.messagebox.showerror("winSync is not set up", str(e))
                 return
@@ -418,7 +462,8 @@ class App:
                 self.messagebox.showerror("Could not start winSync", str(e))
                 return
             self.port_busy = False
-            self._append(f"--- winSync started (Control: {CONTROL_CHOICES[control]}) ---", "note")
+            self._append(f"--- winSync started (Radio: {self.source.get()}, "
+                         f"Control: {CONTROL_CHOICES[control]}) ---", "note")
             self._set_status("Running", OK)
         self._update_buttons()
 

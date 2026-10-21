@@ -7,7 +7,7 @@ setlocal
 cd /d "%~dp0"
 if /i "%~1"=="--setup" goto setup
 if /i "%~1"=="--uninstall" goto uninstall
-".venv\Scripts\python.exe" -c "import aiohttp, tkinter" >nul 2>&1 || goto setup
+".venv\Scripts\python.exe" -c "import aiohttp, tkinter, win32com.client" >nul 2>&1 || goto setup
 
 :run
 start "" ".venv\Scripts\pythonw.exe" -m winSync.gui

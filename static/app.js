@@ -65,21 +65,24 @@ function fmtFreq(hz) {
 }
 
 function render() {
-  chip("cat-chip", radio.cat_connected ? "Thetis: connected" : "Thetis: disconnected",
+  const omni = radio.source === "omnirig";   // read-only OmniRig source: no RX2, no Kiwi -> radio
+  chip("cat-chip", (omni ? "OmniRig" : "Thetis") + (radio.cat_connected ? ": connected" : ": disconnected"),
        radio.cat_connected ? "ok" : "bad");
   $("freq").textContent = fmtFreq(radio.freq_hz);
   $("mode").textContent = radio.mode_label || "—";
   $("band").textContent = radio.band || "—";
   $("txbadge").hidden = !radio.tx;
   const rx2 = radio.rx === 1;
-  $("rxvfo").textContent = (rx2 ? "RX2 · VFO B" : "RX1 · VFO A");
+  $("rxvfo").textContent = omni ? (rx2 ? "VFO B" : "VFO A") : (rx2 ? "RX2 · VFO B" : "RX1 · VFO A");
   $("rxvfo").className = rx2 ? "rx2" : "";
   const sel = $("follow");
   if (radio.follow && document.activeElement !== sel) sel.value = radio.follow;
   const ctl = $("control");
   if (radio.control && document.activeElement !== ctl) ctl.value = radio.control;
+  ctl.disabled = omni;
+  ctl.title = omni ? "OmniRig is read-only in winSync: the radio controls the Kiwi" : "";
   $("control-note").textContent = radio.control_note || "";
-  $("control-note").hidden = !radio.control_note || radio.control === "radio";
+  $("control-note").hidden = !radio.control_note || (radio.control === "radio" && !omni);
   const b = bridge();
   const kind = (b && b.kind && b.kind()) || "Receiver";   // "Kiwi" or "WebSDR", from the bridge
   if (!frame.getAttribute("src")) chip("kiwi-chip", "Receiver: not connected", "");

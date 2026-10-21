@@ -230,3 +230,45 @@ def test_rig_without_tx_reporting_says_so():
         await src.stop()
 
     asyncio.run(scenario())
+
+
+def test_release_all_lets_go_of_omnirig():
+    """The window stops the server with os._exit, which skips the normal shutdown; release_all() must
+    still stop polling and drop every reference to OmniRig (found live: OmniRig kept running)."""
+    import gc
+    import weakref
+
+    async def scenario():
+        fake = FakeOmniRig()
+        ref = weakref.ref(fake)
+        _, src, states, status, _ = await started(fake)
+        await until(lambda: states and status == [True], "online")
+        del fake
+        gc.collect()
+        assert ref() is not None                    # held while polling
+        await asyncio.to_thread(omnirig.release_all)
+        assert not src._thread.is_alive()
+        reads = len(ref().Rig1.reads) if ref() else None
+        src.__dict__.pop("_dispatch")               # the test's lambda also holds the fake
+        gc.collect()
+        assert ref() is None, f"OmniRig still referenced (reads so far: {reads})"
+
+    asyncio.run(scenario())
+
+
+def test_server_exit_releases_omnirig(monkeypatch):
+    """exit_when_parent_goes(): stdin closed -> release_all() before os._exit."""
+    import io
+    import sys
+
+    from winSync import __main__ as main
+    calls = []
+    monkeypatch.setattr(omnirig, "release_all", lambda: calls.append("release"))
+    monkeypatch.setattr(main.os, "_exit", lambda code: calls.append(("exit", code)))
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"")))
+    main.exit_when_parent_goes()
+    for _ in range(100):
+        if len(calls) == 2:
+            break
+        threading.Event().wait(0.02)
+    assert calls == ["release", ("exit", 0)]

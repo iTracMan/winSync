@@ -6,6 +6,7 @@ import threading
 
 from aiohttp import web
 
+from . import omnirig
 from .server import build_app, load_config
 
 
@@ -18,6 +19,7 @@ def exit_when_parent_goes():
                 pass
         except (OSError, ValueError):
             pass
+        omnirig.release_all()    # else OmniRig keeps running and polling the radio
         os._exit(0)
     threading.Thread(target=watch, daemon=True).start()
 

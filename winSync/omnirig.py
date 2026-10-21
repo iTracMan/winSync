@@ -21,6 +21,7 @@ PM_VFOBB 0x400, PM_VFOA 0x800, PM_VFOB 0x1000; ST_ONLINE = 4.
 import asyncio
 import logging
 import threading
+import weakref
 
 log = logging.getLogger("winSync.omnirig")
 
@@ -47,6 +48,21 @@ VFO_B_FLAGS = frozenset({0x200, 0x400, 0x1000})
 CLASS_NOT_REGISTERED = (-2147221005, -2147221164)     # CO_E_CLASSSTRING, REGDB_E_CLASSNOTREG
 READ_ONLY = "winSync only reads from OmniRig, so the Kiwi can't change the radio"
 NOT_INSTALLED = "OmniRig is not installed (https://www.dxatlas.com/OmniRig/)"
+
+
+_running = weakref.WeakSet()      # started OmniRigSources, for release_all()
+
+
+def release_all(timeout=2.0):
+    """Stop every OmniRig polling thread and let go of OmniRig, from any thread. For exits that skip
+    the normal shutdown (the server's os._exit when the winSync window goes): a client that dies still
+    holding OmniRig leaves OmniRig running and polling the radio."""
+    sources = list(_running)
+    for src in sources:
+        src._stop.set()
+    for src in sources:
+        if src._thread and src._thread is not threading.current_thread():
+            src._thread.join(timeout)
 
 
 class UnsafeAccess(AssertionError):
@@ -156,6 +172,7 @@ class OmniRigSource:
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, name="omnirig", daemon=True)
         self._thread.start()
+        _running.add(self)
 
     async def stop(self):
         self._stop.set()
@@ -187,6 +204,7 @@ class OmniRigSource:
 
     def _run(self):
         com = self._thread_init()
+        omni = rig = None
         try:
             while not self._stop.is_set():
                 try:
@@ -209,8 +227,10 @@ class OmniRigSource:
                     omni = rig = None
                     self._stop.wait(min(2.0, self.retry))
         finally:
+            omni = rig = None            # release OmniRig before leaving COM, so it can close
             if com is not None:
                 com.CoUninitialize()
+            log.info("released OmniRig")
 
     def _poll(self, rig, com):
         while not self._stop.is_set():

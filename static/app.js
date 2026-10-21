@@ -17,6 +17,7 @@ let muteOnTx = false;
 let zoomOnBand = true;
 let lastApplied = null;                    // {freq_hz, kiwi_mode, band} last pushed to Kiwi
 let force = false;                         // set to re-push even if unchanged (Resync / Kiwi reload)
+let serverDown = false;                    // the page has lost the winSync server
 const OMNIRIG_READ_ONLY = "OmniRig is read-only: tuning the Kiwi doesn't move the radio";
 let control = "radio";                     // "radio", "kiwi" or "both" (from the server)
 let radioHoldUntil = 0;
@@ -67,8 +68,9 @@ function fmtFreq(hz) {
 
 function render() {
   const omni = radio.source === "omnirig";   // read-only OmniRig source: no RX2, no Kiwi -> radio
-  chip("cat-chip", (omni ? "OmniRig" : "Thetis") + (radio.cat_connected ? ": connected" : ": disconnected"),
-       radio.cat_connected ? "ok" : "bad");
+  if (serverDown) chip("cat-chip", "winSync server: reconnecting…", "bad");   // radio state is stale
+  else chip("cat-chip", (omni ? "OmniRig" : "Thetis") + (radio.cat_connected ? ": connected" : ": disconnected"),
+            radio.cat_connected ? "ok" : "bad");
   $("freq").textContent = fmtFreq(radio.freq_hz);
   $("mode").textContent = radio.mode_label || "—";
   $("band").textContent = radio.band || "—";
@@ -184,9 +186,11 @@ function connectWs() {
       radio = m; control = m.control || "radio"; render();
     }
   };
+  ws.onopen = () => { serverDown = false; };
   ws.onclose = () => {
     radio.cat_connected = false;
-    chip("cat-chip", "winSync server: reconnecting…", "bad");
+    serverDown = true;                     // render() keeps saying so until the server is back
+    render();
     setTimeout(connectWs, 2000);
   };
 }

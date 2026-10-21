@@ -248,6 +248,7 @@ change it treats as yours.
 node tests\test_bridge.js      rem bridge.js logic against stubbed Kiwi and WebSDR pages (needs Node.js)
 node tests\test_kiwiwatch.js   rem Kiwi -> radio change detection
 node tests\page_e2e.js         rem the real page against a real server and the fake Thetis (ports 13114, 8091)
+node tests	est_page_reconnect.js   rem the page while the winSync server is down
 ```
 
 Node.js LTS: `winget install OpenJS.NodeJS.LTS`.

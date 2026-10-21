@@ -14,6 +14,12 @@ Added
   * The page shows "OmniRig: connected" and OmniRig's state (not installed, rig not responding, no TX
     reporting, unknown mode).
   * README: how to test OmniRig with Thetis as a TS-2000 over a com0com virtual COM port pair.
+Fixed
+  * With the winSync server stopped, the page's status box flickered every 2 s between "winSync
+    server: reconnecting…" and the last radio state (Thetis too, since v1.0). It now says
+    "reconnecting…" steadily until the server is back (tests/test_page_reconnect.js).
+  * Stopping winSync from the window left OmniRig running and polling the radio: the server exits
+    with os._exit, which skipped releasing OmniRig. It now releases it first (omnirig.release_all).
 Verified, live with OmniRig 1.20 and Thetis v2.10.3.15 as a TS-2000 over com0com, 2026-10-21
   * The first run lost Rig 1 straight after connecting (RPC_E_DISCONNECTED): winSync released OmniRig's
     main object, and OmniRig then disconnects its Rig objects. Fixed (the object is kept while polling),

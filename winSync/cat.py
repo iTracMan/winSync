@@ -217,7 +217,8 @@ class CatClient:
         if vfo == 0 and self.cat_to_b:
             return CAT_TO_B_NOTE
         if vfo == 0 and self.cat_to_b is None:
-            return "still checking Thetis's CAT to VFO B setting"
+            return ("still checking Thetis's CAT to VFO B setting (this needs VFO A and VFO B on "
+                    "different frequencies)")
         if freq_hz is not None and (not isinstance(freq_hz, int) or uk_band_for(freq_hz) is None):
             return out_of_band(freq_hz)
         if mode is not None and mode not in SETTABLE_MODES:

@@ -11,8 +11,8 @@ from aiohttp import web
 from yarl import URL
 
 from .bands import band_for
-from .cat import FOLLOW_MODES, CatClient
-from .modes import THETIS_LABELS, thetis_to_kiwi
+from .cat import CONTROL_MODES, FOLLOW_MODES, CatClient
+from .modes import THETIS_LABELS, kiwi_to_thetis, thetis_to_kiwi
 from .proxy import SESSION, normalize_target, proxy_http, proxy_ws
 
 log = logging.getLogger("winSync")
@@ -69,6 +69,8 @@ class State:
         self.vfo = 0           # VFO being followed: 0 = A / RX1, 1 = B / RX2
         self.rx2_on = False
         self.follow = cfg["sync"]["follow"] if cfg["sync"]["follow"] in FOLLOW_MODES else "auto"
+        self.control = cfg["sync"]["control"] if cfg["sync"]["control"] in CONTROL_MODES else "radio"
+        self.control_note = None   # lasting reason the Kiwi can't change the radio
         self.cat = None
         self.target = normalize_target(cfg["kiwi"]["url"]) if cfg["kiwi"]["url"] else None
         self.urls_file = urls_path(cfg)
@@ -81,7 +83,8 @@ DEFAULTS = {
     "server": {"host": "127.0.0.1", "port": 8090, "urls_file": ""},
     "cat": {"host": "127.0.0.1", "port": 13013},
     "kiwi": {"url": ""},
-    "sync": {"enabled": True, "zoom_on_band_change": True, "mute_on_tx": False, "follow": "auto"},
+    "sync": {"enabled": True, "zoom_on_band_change": True, "mute_on_tx": False, "follow": "auto",
+             "control": "radio"},
     "modes": {},
 }
 
@@ -113,6 +116,8 @@ def snapshot(st):
         "vfo": "B" if st.vfo == 1 else "A",
         "rx2_on": st.rx2_on,
         "follow": st.follow,
+        "control": st.control,
+        "control_note": st.control_note,
         "freq_hz": freq,
         "cat_mode": mode,
         "mode_label": THETIS_LABELS.get(mode) if mode is not None else None,
@@ -155,11 +160,17 @@ def build_app(cfg):
         st.cat_connected = connected
         asyncio.create_task(broadcast(st))
 
+    def on_note(note):
+        st.control_note = note
+        if note:
+            log.warning("Kiwi -> radio: %s", note)
+        asyncio.create_task(broadcast(st))
+
     async def startup(app):
         app[SESSION] = aiohttp.ClientSession(auto_decompress=False,
                                              cookie_jar=aiohttp.DummyCookieJar())
         st.cat = cat = CatClient(cfg["cat"]["host"], cfg["cat"]["port"], on_state, on_status,
-                                 follow=st.follow)
+                                 follow=st.follow, control=st.control, on_note=on_note)
         cat.start()
         yield
         await cat.stop()
@@ -203,6 +214,49 @@ def build_app(cfg):
         await broadcast(st)
         return web.json_response({"follow": follow})
 
+    async def set_control(request):
+        if not same_origin(request):
+            raise web.HTTPForbidden()
+        try:
+            control = (await request.json())["control"]
+            if control not in CONTROL_MODES:
+                raise ValueError(f"control must be one of {', '.join(CONTROL_MODES)}")
+        except (ValueError, KeyError, TypeError) as e:
+            return web.json_response({"error": str(e)}, status=400)
+        st.control = control
+        log.info("control: %s", {"radio": "radio controls Kiwi", "kiwi": "Kiwi controls radio",
+                                 "both": "both ways"}[control])
+        if st.cat:
+            st.cat.set_control(control)
+        await broadcast(st)
+        return web.json_response({"control": control})
+
+    async def tune(request):
+        """Kiwi -> radio: the user tuned the Kiwi. Moves the followed VFO if that is allowed now
+        (see CatClient.request_tune), otherwise says why the radio was not moved."""
+        if not same_origin(request):
+            raise web.HTTPForbidden()
+        try:
+            body = await request.json()
+            freq, kiwi_mode = body["freq_hz"], body.get("kiwi_mode")
+            if type(freq) is not int or not 0 < freq < 10**10:
+                raise ValueError("freq_hz must be a whole number of Hz")
+            if kiwi_mode is not None and not isinstance(kiwi_mode, str):
+                raise ValueError("kiwi_mode must be a string")
+        except (ValueError, KeyError, TypeError) as e:
+            return web.json_response({"error": str(e)}, status=400)
+        mode = kiwi_to_thetis(kiwi_mode, st.cat_mode, cfg["modes"])
+        reason = st.cat.request_tune(freq, mode) if st.cat else "Thetis is not connected"
+        if reason:
+            log.info("Kiwi -> radio: not moved to %s Hz: %s", freq, reason)
+            return web.json_response({"moved": False, "out_of_band": "UK amateur bands" in reason,
+                                      "message": f"Radio not moved: {reason}"})
+        result_mode = mode if mode is not None else st.cat_mode
+        return web.json_response({
+            "moved": True, "freq_hz": freq, "band": band_for(freq),
+            "kiwi_mode": thetis_to_kiwi(result_mode, cfg["modes"]) if result_mode is not None else None,
+        })
+
     async def set_target(request):
         if not same_origin(request):
             raise web.HTTPForbidden()
@@ -245,6 +299,8 @@ def build_app(cfg):
     app.router.add_get("/_winsync/api/config", get_config)
     app.router.add_post("/_winsync/api/target", set_target)
     app.router.add_post("/_winsync/api/follow", set_follow)
+    app.router.add_post("/_winsync/api/control", set_control)
+    app.router.add_post("/_winsync/api/tune", tune)
     app.router.add_get("/_winsync/api/urls", get_urls)
     app.router.add_put("/_winsync/api/urls", put_urls)
     app.router.add_static("/_winsync/static", STATIC_DIR)

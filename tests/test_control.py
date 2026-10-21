@@ -297,3 +297,20 @@ def test_nothing_is_sent_during_or_just_after_tx():
         await fake.stop()
 
     asyncio.run(scenario())
+
+
+def test_redirect_is_only_decided_while_a_and_b_differ():
+    c, _ = ready_client(0)
+    c.cat_to_b = None
+    c.freq_a = c.freq_b = c._zzfa = 7_100_000        # A = B: ZZFA; can't tell which it read
+    c._check_redirect()
+    assert c.cat_to_b is None and "different frequencies" in c.request_tune(7_074_000)
+    c.freq_b = 14_200_000
+    c._check_redirect()
+    assert c.cat_to_b is False
+    c.freq_b = 7_100_000                             # once known it stays known...
+    c._check_redirect()
+    assert c.cat_to_b is False
+    c.freq_b, c._zzfa = 14_200_000, 14_200_000       # ...until ZZFA; reports VFO B
+    c._check_redirect()
+    assert c.cat_to_b is True

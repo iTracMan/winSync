@@ -1,6 +1,22 @@
 winSync CHANGELOG
 =================
 
+Unreleased (branch feature/two-way-sync)
+----------------------------------------
+Added
+  * Optional two-way sync: a Control selector on the page, [sync] control in config.toml and
+    --control: "radio" (default, unchanged from v1.0), "kiwi" (tuning the Kiwi sets the radio) or
+    "both" (last tuned wins).
+  * The radio is only changed by ZZFA/ZZFB (frequency) and ZZMD/ZZME (LSB, USB, CWL, CWU, FM, AM, SAM)
+    of the followed VFO, while receiving (and 1 s after TX), inside the UK amateur bands as Thetis's UK
+    region defines them, from a reading at most 0.5 s old. Anything else is refused by cat.py; a test
+    tries all 421 Thetis CAT commands. Out of band, the page says "Radio not moved: ... outside the UK
+    amateur bands (Kiwi only)".
+  * MI0BOT "CAT to VFO B" is detected with the read ZZFA; and VFO A is then never set. A set that
+    shows up on the other VFO stops control.
+  * static/kiwiwatch.js (Kiwi change detection, with debounce and echo suppression),
+    tests/test_control.py, tests/test_kiwiwatch.js and tests/page_e2e.js.
+
 2026-10-19 - v1.0: Windows / Thetis version of piSync v0.9
 ----------------------------------------------------------
 Added

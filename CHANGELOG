@@ -10,6 +10,7 @@ Added
     COM (pywin32, now in requirements.txt) and never sets a property or calls a method (ReadOnlyRig,
     tests/test_omnirig.py with a fake OmniRig that records every access). Two-way sync is off with
     OmniRig: Control is fixed to Radio controls Kiwi.
+  * The page always says "OmniRig is read-only: tuning the Kiwi doesn't move the radio".
   * The page shows "OmniRig: connected" and OmniRig's state (not installed, rig not responding, no TX
     reporting, unknown mode).
   * README: how to test OmniRig with Thetis as a TS-2000 over a com0com virtual COM port pair.

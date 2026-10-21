@@ -17,6 +17,7 @@ let muteOnTx = false;
 let zoomOnBand = true;
 let lastApplied = null;                    // {freq_hz, kiwi_mode, band} last pushed to Kiwi
 let force = false;                         // set to re-push even if unchanged (Resync / Kiwi reload)
+const OMNIRIG_READ_ONLY = "OmniRig is read-only: tuning the Kiwi doesn't move the radio";
 let control = "radio";                     // "radio", "kiwi" or "both" (from the server)
 let radioHoldUntil = 0;
 let tuneInFlight = false;
@@ -81,8 +82,11 @@ function render() {
   if (radio.control && document.activeElement !== ctl) ctl.value = radio.control;
   ctl.disabled = omni;
   ctl.title = omni ? "OmniRig is read-only in winSync: the radio controls the Kiwi" : "";
-  $("control-note").textContent = radio.control_note || "";
-  $("control-note").hidden = !radio.control_note || (radio.control === "radio" && !omni);
+  // OmniRig: always say it is read-only, after any OmniRig problem (not installed, not responding...)
+  const note = omni ? [radio.control_note, OMNIRIG_READ_ONLY].filter(Boolean).join(" · ")
+                    : radio.control_note || "";
+  $("control-note").textContent = note;
+  $("control-note").hidden = !note || (radio.control === "radio" && !omni);
   const b = bridge();
   const kind = (b && b.kind && b.kind()) || "Receiver";   // "Kiwi" or "WebSDR", from the bridge
   if (!frame.getAttribute("src")) chip("kiwi-chip", "Receiver: not connected", "");

@@ -198,6 +198,28 @@ def test_com_error_drops_and_reconnects():
     asyncio.run(scenario())
 
 
+def test_keeps_omnirig_object_while_polling():
+    """Real OmniRig disconnects Rig1/Rig2 once no client holds the OmniRigX object (found live)."""
+    class DyingRig(FakeRig):
+        def __getattr__(self, name):
+            if self.values.get("dead"):
+                raise OSError("The object invoked has disconnected from its clients.")
+            return super().__getattr__(name)
+
+    class OwningOmniRig(FakeOmniRig):
+        def __del__(self):
+            self.Rig1.set(dead=True)
+
+    async def scenario():
+        _, src, states, status, notes = await started(dispatch=lambda: OwningOmniRig(rig1=DyingRig()))
+        await until(lambda: len(states) >= 1 and status == [True], "online")
+        await asyncio.sleep(0.2)
+        assert status == [True] and notes in ([], [None])      # never dropped
+        await src.stop()
+
+    asyncio.run(scenario())
+
+
 def test_rig_without_tx_reporting_says_so():
     async def scenario():
         fake = FakeOmniRig(rig1=FakeRig(ReadableParams=0xFFFF, RigType="FT-817"))

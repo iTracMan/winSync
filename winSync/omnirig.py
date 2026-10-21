@@ -190,7 +190,10 @@ class OmniRigSource:
         try:
             while not self._stop.is_set():
                 try:
-                    rig = ReadOnlyRig(getattr(self._dispatch(), f"Rig{self.rig_no}"))
+                    # Keep the OmniRigX object referenced while polling: once the last client
+                    # reference to it goes, OmniRig disconnects its Rig objects (RPC_E_DISCONNECTED).
+                    omni = self._dispatch()
+                    rig = ReadOnlyRig(getattr(omni, f"Rig{self.rig_no}"))
                 except OmniRigUnavailable as e:
                     self._post(self._offline, str(e))
                     self._stop.wait(self.retry)
@@ -203,6 +206,7 @@ class OmniRigSource:
                 except Exception as e:           # COM error: OmniRig closed or crashed
                     log.info("OmniRig connection lost: %s", e)
                     self._post(self._offline, "lost the connection to OmniRig")
+                    omni = rig = None
                     self._stop.wait(min(2.0, self.retry))
         finally:
             if com is not None:

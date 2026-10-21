@@ -206,14 +206,16 @@ Without another radio, Thetis can stand in for one: OmniRig talks to it as a Ken
 of virtual COM ports.
 
 1. Install **com0com** (the signed 2.2.2.0 build, from the com0com project on SourceForge) and create a
-   pair, e.g. **COM20 <-> COM21** (com0com Setup; tick *use Ports class*, leave
-   *emulate baud rate* off).
-2. In Thetis: **Setup > Serial/Network/Midi CAT > CAT Control**: CAT port **COM20**, 9600 8N1, **ID as
-   TS-2000**, and tick **Enable CAT**. (Thetis's TCP/IP CAT server for normal winSync stays as it is.)
-3. Install OmniRig 1.20 and open **OmniRig Settings**: Rig 1, rig type **TS-2000**, port **COM21**, 9600,
-   8 data bits, no parity, 1 stop bit, poll 200 ms. The status should change to *On-line*.
+   pair, e.g. **COM20 <-> COM21** (leave *emulate baud rate* off). **OmniRig 1.20 can't see ports above
+   COM20**, so OmniRig's end of the pair must be COM20 or lower.
+2. In Thetis: **Setup > Serial/Network/Midi CAT > CAT Control**: CAT port **COM21**, 9600 8N1, **ID as
+   TS-2000**, PTT by RTS/DTR off, *Allow Kenwood AI Command* off, and tick **Enable CAT**. (Thetis's
+   TCP/IP CAT server for normal winSync stays as it is.)
+3. Install OmniRig 1.20 and open **OmniRig Settings**: Rig 1, rig type **TS-2000**, port **COM20**, 9600,
+   8 data bits, no parity, 1 stop bit, RTS and DTR Low, poll 500 ms, timeout 4000 ms. The status should
+   change to *On-line*.
    *Before this step, look at the `[INIT]` section of OmniRig's `Rigs\TS-2000.ini`*: those commands go to
-   Thetis as soon as OmniRig connects.
+   Thetis as soon as OmniRig connects (in 1.20 it is only `AI0;`).
 4. In the winSync window choose **Radio: OmniRig Rig 1**, tick the box and press **Start winSync**. The
    log should say `OmniRig Rig 1 online: TS-2000`; the page shows **OmniRig: connected** and follows
    Thetis's VFO A as you tune, change mode and press MOX or TUNE (TX).

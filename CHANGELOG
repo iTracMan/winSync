@@ -13,6 +13,11 @@ Added
   * The page shows "OmniRig: connected" and OmniRig's state (not installed, rig not responding, no TX
     reporting, unknown mode).
   * README: how to test OmniRig with Thetis as a TS-2000 over a com0com virtual COM port pair.
+Verified, live with OmniRig 1.20 and Thetis v2.10.3.15 as a TS-2000 over com0com, 2026-10-21
+  * The first run lost Rig 1 straight after connecting (RPC_E_DISCONNECTED): winSync released OmniRig's
+    main object, and OmniRig then disconnects its Rig objects. Fixed (the object is kept while polling),
+    with a test. After that: OmniRig Rig 1 online: TS-2000, 7.130000 MHz LSB RX, matching Thetis.
+  * OmniRig 1.20 lists only COM1-COM20, so its end of the com0com pair must be COM20 or lower.
 
 2026-10-21 - v1.1: optional two-way sync (Kiwi -> radio)
 --------------------------------------------------------

@@ -45,4 +45,6 @@ iframe { flex: 1; width: 100%; border: 0; background: #000; }
 #txbadge[hidden] { display: none; }
 #rxvfo { align-self: center; padding: 1px 8px; border-radius: 4px; background: #263041; color: var(--muted); }
 #rxvfo.rx2 { background: #3a2f14; color: var(--warn); }
-#follow { padding: 4px 6px; border-radius: 4px; border: 1px solid #3a4658; background: var(--bg); color: var(--text); }
+#control-note { flex-basis: 100%; color: var(--warn); font-size: 12px; }
+#control-note[hidden] { display: none; }
+#follow, #control { padding: 4px 6px; border-radius: 4px; border: 1px solid #3a4658; background: var(--bg); color: var(--text); }

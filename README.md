@@ -48,6 +48,9 @@ If Windows SmartScreen asks about `winSync.cmd` the first time, choose *More inf
 1. Start Thetis with the TCP/IP CAT server on, then tick
    **"Thetis is running and its TCP/IP CAT server is enabled"**. Start stays greyed out until you do.
 2. Press **Start winSync**. Its output scrolls in the field below; **Stop winSync** stops it.
+   **Control** (below the Start button, default `[sync] control` in `config.toml`) chooses two-way sync
+   when winSync starts: Radio controls Kiwi, Kiwi controls radio or Both. While winSync runs it is
+   locked; change it with the Control selector on the page instead.
 3. Press **Open winSync page** to open <http://127.0.0.1:8090/_winsync/> in your default browser
    (only enabled while winSync is running). **Open websdr map** opens
    <https://rx-tx.info/map-sdr-points#close>, handy for finding a receiver.

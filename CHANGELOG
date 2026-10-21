@@ -4,9 +4,9 @@ winSync CHANGELOG
 Unreleased (branch feature/two-way-sync)
 ----------------------------------------
 Added
-  * Optional two-way sync: a Control selector on the page, [sync] control in config.toml and
-    --control: "radio" (default, unchanged from v1.0), "kiwi" (tuning the Kiwi sets the radio) or
-    "both" (last tuned wins).
+  * Optional two-way sync: a Control selector on the page and in the winSync window (used when
+    winSync starts), [sync] control in config.toml and --control: "radio" (default, unchanged from
+    v1.0), "kiwi" (tuning the Kiwi sets the radio) or "both" (last tuned wins).
   * The radio is only changed by ZZFA/ZZFB (frequency) and ZZMD/ZZME (LSB, USB, CWL, CWU, FM, AM, SAM)
     of the followed VFO, while receiving (and 1 s after TX), inside the UK amateur bands as Thetis's UK
     region defines them, from a reading at most 0.5 s old. Anything else is refused by cat.py; a test

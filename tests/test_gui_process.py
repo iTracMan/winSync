@@ -45,6 +45,32 @@ def alive(pid):
         k32.CloseHandle(h)
 
 
+def test_control_flag_added_only_when_requested(tmp_path, monkeypatch):
+    seen = []
+    import winSync.gui as gui
+    monkeypatch.setattr(gui.subprocess, "Popen",
+                        lambda argv, **kw: seen.append(argv) or (_ for _ in ()).throw(OSError("stop")))
+    sp = ServerProcess(root=tmp_path)
+    monkeypatch.setattr(sp, "venv_python", lambda: tmp_path / "python.exe")
+    for control in (None, "both", "radio"):
+        with pytest.raises(OSError):
+            sp.start(control=control)
+    assert seen[0][-1] == "--exit-with-stdin"
+    assert seen[1][-2:] == ["--control", "both"] and seen[2][-2:] == ["--control", "radio"]
+
+
+def test_read_control(tmp_path):
+    from winSync.gui import read_control
+    assert read_control(tmp_path) == "radio"                       # no config
+    for value in ("radio", "kiwi", "both"):
+        (tmp_path / "config.toml").write_text(f'[sync]\ncontrol = "{value}"\n')
+        assert read_control(tmp_path) == value
+    (tmp_path / "config.toml").write_text('[sync]\ncontrol = "everything"\n')
+    assert read_control(tmp_path) == "radio"
+    (tmp_path / "config.toml").write_text("not [valid toml")
+    assert read_control(tmp_path) == "radio"
+
+
 def test_follow_flag_added_only_when_requested(tmp_path, monkeypatch):
     seen = []
     import winSync.gui as gui

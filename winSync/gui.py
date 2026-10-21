@@ -18,6 +18,8 @@ APP_ID = "M0AWS.winSync"      # Windows taskbar identity, so the window shows wi
 DEFAULT_CAT_PORT = 13013
 DEFAULT_WEB_PORT = 8090
 WEBSDR_MAP_URL = "https://rx-tx.info/map-sdr-points#close"
+# Two-way sync: [sync] control / --control value -> label in the window (and on the page)
+CONTROL_CHOICES = {"radio": "Radio controls Kiwi", "kiwi": "Kiwi controls radio", "both": "Both"}
 MAX_LOG_LINES = 5000
 POLL_MS = 100
 # "Address already in use" as aiohttp reports it on Windows (WSAEADDRINUSE) and elsewhere
@@ -56,7 +58,7 @@ class ServerProcess:
     def running(self):
         return self.proc is not None and self.proc.poll() is None
 
-    def start(self, follow=None):
+    def start(self, follow=None, control=None):
         if self.running:
             return
         argv = self.argv
@@ -69,6 +71,8 @@ class ServerProcess:
             argv = [str(py), "-u", "-m", "winSync", "--exit-with-stdin"]
             if follow:
                 argv += ["--follow", follow]
+            if control:
+                argv += ["--control", control]
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # no console window for the server
         env = dict(os.environ, PYTHONIOENCODING="utf-8")
         self.events = q = queue.Queue()
@@ -123,6 +127,12 @@ def read_port(section, default, root=ROOT):
         return int(read_config(root).get(section, {}).get("port", default))
     except (TypeError, ValueError):
         return default
+
+
+def read_control(root=ROOT):
+    """[sync] control from config.toml: "radio", "kiwi" or "both" ("radio" if unset or invalid)."""
+    control = read_config(root).get("sync", {}).get("control", "radio")
+    return control if control in CONTROL_CHOICES else "radio"
 
 
 def read_cat_port(root=ROOT):
@@ -296,6 +306,20 @@ class App:
                                 bg=BTN, fg=TEXT, activebackground="#2f3b50", activeforeground=TEXT,
                                 disabledforeground=MUTED, relief="flat", padx=8, pady=4)
         self.button.pack(side="left")
+        # Two-way sync, used when winSync starts (the page's Control selector changes it while running)
+        ctl_row = tk.Frame(win, bg=BG)
+        ctl_row.pack(fill="x", padx=12, pady=(2, 4), after=bar)
+        self.control = tk.StringVar(value=CONTROL_CHOICES[read_control()])
+        tk.Label(ctl_row, text="Control", bg=BG, fg=TEXT).pack(side="left", padx=(0, 6))
+        self.control_menu = tk.OptionMenu(ctl_row, self.control, *CONTROL_CHOICES.values())
+        self.control_menu.configure(bg=BTN, fg=TEXT, activebackground="#2f3b50", activeforeground=TEXT,
+                                    disabledforeground=MUTED, relief="flat", highlightthickness=0,
+                                    width=18, anchor="w")
+        self.control_menu["menu"].configure(bg=PANEL, fg=TEXT, activebackground="#2f3b50",
+                                            activeforeground=TEXT)
+        self.control_menu.pack(side="left")
+        tk.Label(ctl_row, text="used when winSync starts; change it on the page while running",
+                 bg=BG, fg=MUTED).pack(side="left", padx=10)
         self.status = tk.Label(bar, text="Stopped", bg=BG, fg=MUTED, font=("TkDefaultFont", 11, "bold"))
         self.status.pack(side="left", padx=14)
         tk.Button(bar, text="Clear", command=self._clear, bg=BTN, fg=TEXT, activebackground="#2f3b50",
@@ -355,6 +379,7 @@ class App:
             self.button.configure(text="Start winSync",
                                   state="normal" if self.confirmed.get() else "disabled")
         self.check.configure(state="disabled" if running or self.stopping else "normal")
+        self.control_menu.configure(state="disabled" if running or self.stopping else "normal")
         self.open_button.configure(state="normal" if running and not self.stopping else "disabled")
 
     def _open_page(self):
@@ -383,8 +408,9 @@ class App:
             self._set_status("Stopping…", WARN)
             self.server.stop()
         else:
+            control = next(k for k, v in CONTROL_CHOICES.items() if v == self.control.get())
             try:
-                self.server.start()
+                self.server.start(control=control)
             except SetupError as e:
                 self.messagebox.showerror("winSync is not set up", str(e))
                 return
@@ -392,7 +418,7 @@ class App:
                 self.messagebox.showerror("Could not start winSync", str(e))
                 return
             self.port_busy = False
-            self._append("--- winSync started ---", "note")
+            self._append(f"--- winSync started (Control: {CONTROL_CHOICES[control]}) ---", "note")
             self._set_status("Running", OK)
         self._update_buttons()
 

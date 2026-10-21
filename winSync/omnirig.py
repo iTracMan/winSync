@@ -12,11 +12,11 @@ COM runs in a thread of its own (initialised there) that polls the rig about 10 
 OmniRig answers from its own copy of the rig's state, which it keeps up to date by polling the
 radio. Results are handed to the asyncio loop.
 
-Values checked against the OmniRig type library as used by omnipyrig (github.com/4Z1KD/omnipyrig):
+Values checked against the type library in OmniRig.exe 1.20 (RigParamX, RigStatusX, IRigX):
 ProgID OmniRig.OmniRigX with Rig1/Rig2; mode flags PM_SSB_L 0x04000000, PM_SSB_U 0x02000000,
 PM_CW_U 0x00800000, PM_CW_L 0x01000000, PM_DIG_L 0x10000000, PM_DIG_U 0x08000000, PM_AM 0x20000000,
-PM_FM 0x40000000; PM_RX 0x00200000, PM_TX 0x00400000. ST_ONLINE = 4 (RigStatusX) is still to be
-confirmed against a running OmniRig.
+PM_FM 0x40000000; PM_RX 0x00200000, PM_TX 0x00400000; PM_VFOAA 0x80, PM_VFOAB 0x100, PM_VFOBA 0x200,
+PM_VFOBB 0x400, PM_VFOA 0x800, PM_VFOB 0x1000; ST_ONLINE = 4.
 """
 import asyncio
 import logging
@@ -41,7 +41,7 @@ OMNIRIG_MODES = {
     0x08000000: 7,   # DIG_U -> DIGU
     0x10000000: 9,   # DIG_L -> DIGL
 }
-# Vfo flags whose receive VFO is B: VFOBA/VFOBB (0x200 and 0x400, in whichever order) and VFOB.
+# Vfo flags whose receive VFO is B (OmniRig names them RX VFO first): VFOBA, VFOBB and VFOB.
 # Everything else (VFOAA, VFOAB, VFOA, unknown) counts as VFO A.
 VFO_B_FLAGS = frozenset({0x200, 0x400, 0x1000})
 CLASS_NOT_REGISTERED = (-2147221005, -2147221164)     # CO_E_CLASSSTRING, REGDB_E_CLASSNOTREG

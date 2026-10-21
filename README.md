@@ -220,6 +220,12 @@ of virtual COM ports.
 5. Quit OmniRig or untick Enable CAT in Thetis: the page should say why it is disconnected, and recover
    when you undo it.
 
+What to expect from Thetis as a TS-2000 (from Thetis's source): OmniRig polls `IF;`, `FA;` and `FB;`, all
+reads. `IF;` reports VFO A (VFO B with MI0BOT's CAT to VFO B), always as "receiving on VFO A", and TX
+from MOX only. Modes Thetis has no Kenwood code for (SAM, DSB, SPEC, DRM) are reported as USB, so the
+Kiwi goes to USB. The `[INIT]` command `AI0;` (auto-information off) is refused with `?;` unless Thetis
+allows Kenwood frequency broadcasts, and changes nothing else.
+
 ## Running from a terminal instead
 
 ```bat

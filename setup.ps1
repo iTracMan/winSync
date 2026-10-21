@@ -135,13 +135,13 @@ if (-not (Test-Path $VenvPy)) {
     if ($LASTEXITCODE -ne 0) { Say 'Could not create .venv.' 'Red'; exit 1 }
 }
 
-Say 'Installing winSync requirements (aiohttp)...' 'Cyan'
+Say 'Installing winSync requirements (aiohttp, pywin32)...' 'Cyan'
 & $VenvPy -m pip install --disable-pip-version-check --quiet -r (Join-Path $Root 'requirements.txt')
 if ($LASTEXITCODE -ne 0) {
     Say 'Installing the requirements failed (is this PC online?).' 'Red'
     exit 1
 }
-& $VenvPy -c 'import aiohttp, tkinter'
+& $VenvPy -c 'import aiohttp, tkinter, win32com.client'
 if ($LASTEXITCODE -ne 0) { Say 'The new environment is not usable.' 'Red'; exit 1 }
 
 if (-not $NoShortcuts) { New-Shortcuts }

@@ -297,3 +297,50 @@ def test_dry_run_never_sends_and_diag_is_opt_in():
         await fake.stop()
 
     run(scenario())
+
+
+def test_omnirig_source_is_read_only(monkeypatch):
+    """With [cat] source = "omnirig": Control is forced to "radio", the page can't change that, and
+    /api/tune never moves the radio. Uses the real COM path, so on a PC without OmniRig it also
+    checks the "not installed" note; with OmniRig installed it only checks what doesn't depend on it."""
+    from winSync import omnirig
+
+    async def scenario():
+        kiwi = TestServer(fake_kiwi())
+        await kiwi.start_server()
+        cfg = load_config(None)
+        cfg["server"]["urls_file"] = tempfile.mkdtemp() + "/urls.json"
+        cfg["cat"]["source"] = "omnirig"
+        cfg["sync"]["control"] = "both"
+        cfg["kiwi"]["url"] = f"http://127.0.0.1:{kiwi.port}/"
+        client = TestClient(TestServer(build_app(cfg)))
+        await client.start_server()
+        st = client.app[STATE]
+        assert st.source == "omnirig" and st.control == "radio"
+        assert isinstance(st.cat, omnirig.OmniRigSource)
+        r = await client.post("/_winsync/api/control", json={"control": "kiwi"})
+        assert r.status == 400 and (await r.json())["error"] == omnirig.READ_ONLY
+        assert (await client.post("/_winsync/api/control", json={"control": "radio"})).status == 200
+        r = await client.post("/_winsync/api/tune", json={"freq_hz": 7_074_000, "kiwi_mode": "lsb"})
+        j = await r.json()
+        assert j["moved"] is False and j["message"] == "Radio not moved: " + omnirig.READ_ONLY
+        async with client.ws_connect("/_winsync/ws") as ws:
+            snap = json.loads((await ws.receive()).data)
+        assert snap["source"] == "omnirig" and snap["control"] == "radio"
+        assert (await (await client.get("/_winsync/api/config")).json())["source"] == "omnirig"
+        try:
+            import winreg
+            winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, omnirig.PROG_ID).Close()
+            installed = True
+        except OSError:
+            installed = False
+        if not installed:
+            for _ in range(100):
+                if st.control_note:
+                    break
+                await asyncio.sleep(0.02)
+            assert st.control_note == omnirig.NOT_INSTALLED and st.cat_connected is False
+        await client.close()
+        await kiwi.close()
+
+    run(scenario())

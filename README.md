@@ -10,7 +10,7 @@
 
 Keeps a [KiwiSDR](http://kiwisdr.com/) or [WebSDR](http://websdr.org/) web receiver tuned to the same
 **frequency, mode and band** as **Thetis** (tested with v2.10.3.15, MI0BOT Hermes Lite 2 build) on
-Windows 10/11.
+Windows 10/11. Other radios can be followed, read-only, through OmniRig (see "OmniRig" below).
 
 ## How it works
 
@@ -34,7 +34,8 @@ The first time, a console window sets winSync up:
 
 * it looks for Python 3.11 or newer with tkinter. If there is none it offers to install Python 3.12 with
   `winget`, for your user only (no administrator rights needed); answer **Y**;
-* it creates a private Python environment (`.venv`) in this folder and installs `aiohttp` into it;
+* it creates a private Python environment (`.venv`) in this folder and installs `aiohttp` and `pywin32`
+  (for OmniRig) into it;
 * it puts a **winSync** shortcut on the Desktop and in the Start menu.
 
 Then the winSync window opens. Later starts go straight to the window, from either `winSync.cmd` or the
@@ -47,6 +48,8 @@ If Windows SmartScreen asks about `winSync.cmd` the first time, choose *More inf
 
 1. Start Thetis with the TCP/IP CAT server on, then tick
    **"Thetis is running and its TCP/IP CAT server is enabled"**. Start stays greyed out until you do.
+   **Radio** (default `[cat] source` in `config.toml`) chooses Thetis or OmniRig Rig 1 / Rig 2; with
+   OmniRig the box asks you to confirm OmniRig is set up instead.
 2. Press **Start winSync**. Its output scrolls in the field below; **Stop winSync** stops it.
    **Control** (below the Start button, default `[sync] control` in `config.toml`) chooses two-way sync
    when winSync starts: Radio controls Kiwi, Kiwi controls radio or Both. While winSync runs it is
@@ -166,13 +169,73 @@ These were tested against Thetis v2.10.3.15 (MI0BOT HL2) on 2026-10-19:
 
 A batch of all five takes about 56 ms to answer, against 51 ms for a single command.
 
+## OmniRig (other radios, read-only)
+
+Instead of Thetis, winSync can follow any radio that [OmniRig](https://www.dxatlas.com/OmniRig/)
+(VE3NEA's free CAT engine, v1.20) supports. Choose **Radio: OmniRig Rig 1** or **Rig 2** in the winSync
+window, or set it in `config.toml`:
+
+```toml
+[cat]
+source = "omnirig"
+
+[omnirig]
+rig = 1          # OmniRig's Rig 1 or Rig 2
+```
+
+(`--source omnirig --rig 2` on the command line.) Set the radio up in OmniRig itself (rig type, COM port,
+baud rate). winSync starts OmniRig through COM when it needs it, using `pywin32` (installed by setup).
+
+* **Read-only, always.** winSync only reads OmniRig's `Status`, `StatusStr`, `RigType`,
+  `ReadableParams`, `Freq`, `FreqA`, `FreqB`, `Vfo`, `Mode` and `Tx`. It never sets a property or calls
+  a method (`winSync/omnirig.py`, `ReadOnlyRig`; the tests check that against a fake OmniRig that records
+  everything). So two-way sync is off with OmniRig: Control is fixed to *Radio controls Kiwi*, and the
+  page's Control selector is greyed out.
+* OmniRig itself sends its rig file's commands to the radio (to poll it, plus any `[INIT]` commands in
+  that rig's `.ini` file). That is OmniRig's traffic, not winSync's.
+* Modes: LSB, USB, CW-L, CW-U, FM, AM, DIG-U and DIG-L map to Kiwi modes as for Thetis. If the radio
+  reports another mode, the Kiwi is not tuned and the page says why.
+* VFO: Follow Auto follows the VFO OmniRig reports as receiving; Follow A or B uses `FreqA` / `FreqB`.
+* TX: if the rig's OmniRig file doesn't report TX, the page says so, and Mute on TX can't work.
+* If OmniRig isn't installed, the radio isn't responding or OmniRig closes, the page says so and winSync
+  keeps retrying.
+
+### Testing OmniRig with Thetis
+
+Without another radio, Thetis can stand in for one: OmniRig talks to it as a Kenwood TS-2000 over a pair
+of virtual COM ports.
+
+1. Install **com0com** (the signed 2.2.2.0 build, from the com0com project on SourceForge) and create a
+   pair, e.g. **COM20 <-> COM21** (leave *emulate baud rate* off). **OmniRig 1.20 can't see ports above
+   COM20**, so OmniRig's end of the pair must be COM20 or lower.
+2. In Thetis: **Setup > Serial/Network/Midi CAT > CAT Control**: CAT port **COM21**, 9600 8N1, **ID as
+   TS-2000**, PTT by RTS/DTR off, *Allow Kenwood AI Command* off, and tick **Enable CAT**. (Thetis's
+   TCP/IP CAT server for normal winSync stays as it is.)
+3. Install OmniRig 1.20 and open **OmniRig Settings**: Rig 1, rig type **TS-2000**, port **COM20**, 9600,
+   8 data bits, no parity, 1 stop bit, RTS and DTR Low, poll 500 ms, timeout 4000 ms. The status should
+   change to *On-line*.
+   *Before this step, look at the `[INIT]` section of OmniRig's `Rigs\TS-2000.ini`*: those commands go to
+   Thetis as soon as OmniRig connects (in 1.20 it is only `AI0;`).
+4. In the winSync window choose **Radio: OmniRig Rig 1**, tick the box and press **Start winSync**. The
+   log should say `OmniRig Rig 1 online: TS-2000`; the page shows **OmniRig: connected** and follows
+   Thetis's VFO A as you tune, change mode and press MOX or TUNE (TX).
+5. Quit OmniRig or untick Enable CAT in Thetis: the page should say why it is disconnected, and recover
+   when you undo it.
+
+What to expect from Thetis as a TS-2000 (from Thetis's source): OmniRig polls `IF;`, `FA;` and `FB;`, all
+reads. `IF;` reports VFO A (VFO B with MI0BOT's CAT to VFO B), always as "receiving on VFO A", and TX
+from MOX only. Modes Thetis has no Kenwood code for (SAM, DSB, SPEC, DRM) are reported as USB, so the
+Kiwi goes to USB. The `[INIT]` command `AI0;` (auto-information off) is refused with `?;` unless Thetis
+allows Kenwood frequency broadcasts, and changes nothing else.
+
 ## Running from a terminal instead
 
 ```bat
 .venv\Scripts\python.exe -m winSync            rem or: --config path\to\config.toml, --follow A|B|auto, -v
 ```
 
-`--control radio|kiwi|both` overrides `[sync] control`. For testing two-way sync, `--dry-run` makes it
+`--control radio|kiwi|both` overrides `[sync] control`; `--source thetis|omnirig` and `--rig 1|2`
+override `[cat] source` and `[omnirig] rig`. For testing two-way sync, `--dry-run` makes it
 decide as usual but never send anything to the radio (the log says what it would have done), and
 `--diag` makes the page log every Kiwi readback change, every time winSync tunes the Kiwi and every
 change it treats as yours.
@@ -185,6 +248,7 @@ change it treats as yours.
 node tests\test_bridge.js      rem bridge.js logic against stubbed Kiwi and WebSDR pages (needs Node.js)
 node tests\test_kiwiwatch.js   rem Kiwi -> radio change detection
 node tests\page_e2e.js         rem the real page against a real server and the fake Thetis (ports 13114, 8091)
+node tests\test_page_reconnect.js   rem the page while the winSync server is down
 ```
 
 Node.js LTS: `winget install OpenJS.NodeJS.LTS`.

@@ -4,9 +4,12 @@ Manual: python -m tests.fake_thetis [port]  -- then type e.g. `a 14074000 1`, `b
 `rx2 1` or `tx 1` (Thetis mode numbers: 0 LSB, 1 USB, 3 CWL, 4 CWU, 7 DIGU, ...).
 Mimics Thetis v2.10.3.15 (MI0BOT): greeting banner on connect, answers the ZZ read commands winSync
 uses with the same layouts as the real one (see the probe results in the README), "?;" to anything
-else, and never pushes changes.
+else, and never pushes changes. Like Thetis it accepts the four sets two-way sync uses (ZZFA/ZZFB +
+11 digits, ZZMD/ZZME + 2 digits) without a reply, and with cat_to_b=True sends ZZFA/ZZMD (read and
+set) to VFO B as MI0BOT's "CAT to VFO B" option does.
 """
 import asyncio
+import re
 import sys
 
 BANNER = "#Thetis TCP/IP Cat - Thetis v2.10.3.15 x64 (09/04/26) HL2 (MI0BOT)#;"
@@ -20,6 +23,8 @@ class FakeThetis:
         self.rx2 = False
         self.mox = self.tun = False
         self.answer = True                           # False: swallow requests (a hung Thetis)
+        self.cat_to_b = False                        # MI0BOT "CAT to VFO B" redirect
+        self.lock = False                            # VFO lock: sets are ignored
         self.received = []
         self.writers = []
         self._server = None
@@ -35,6 +40,11 @@ class FakeThetis:
         await self._server.wait_closed()
 
     def reply(self, cmd):
+        m = re.fullmatch(r"(ZZF[AB])(\d{11})|(ZZM[DE])(\d{2})", cmd)
+        if m:
+            return self._set(m)
+        if cmd == "ZZFA":
+            return f"ZZFA{self.freq_b if self.cat_to_b else self.freq_a:011d};"
         if cmd == "ZZIF":   # freq step rit ritOn xitOn mem TX mode(2) fr scan split balance
             return (f"ZZIF{self.freq_a:011d}0011+00000" "0" "0" "000"
                     f"{int(self.mox)}{self.mode_a:02d}" "0" "0" "0" "0000;")
@@ -47,6 +57,19 @@ class FakeThetis:
         if cmd == "ZZXV":
             return f"ZZXV{(self.mox << 6) | (self.tun << 7):04d};"
         return "?;"
+
+    def _set(self, m):
+        b = m.group(1) == "ZZFB" or m.group(3) == "ZZME" or self.cat_to_b
+        if m.group(1):
+            if not self.lock:
+                setattr(self, "freq_b" if b else "freq_a", int(m.group(2)))
+            return ""
+        mode = int(m.group(4))
+        if mode > 11 or (mode == 8 and b):
+            return "?;"
+        if not self.lock:
+            setattr(self, "mode_b" if b else "mode_a", mode)
+        return ""
 
     async def _client(self, reader, writer):
         self.writers.append(writer)

@@ -167,6 +167,20 @@ async function setControl(v) {
     assert.strictEqual(radioSets(), 2, "nothing sent with Control=radio");
     console.log("7 ok: Radio controls Kiwi: no sets");
 
+    // 8. A Kiwi that keeps moving on its own (as in the first live test: -10 Hz about once a
+    //    second, e.g. a stuck auto-repeat step button): stopped after 5 changes, page says why
+    serverLog = serverLog.replace(/control: /g, "ctl ");
+    const n8 = radioSets();                       // the Kiwi was left away from the radio in 7.
+    await setControl("both");
+    await sleep(1500);
+    assert.strictEqual(radioSets(), n8, "choosing Control did not move the radio");
+    let f8 = kiwi.cur.freq_hz;
+    for (let i = 0; i < 12; i++) { f8 -= 10; kiwi.cur = { freq_hz: f8, mode: "lsb" }; await sleep(1000); }
+    assert.strictEqual(radioSets() - n8, 5, "runaway stopped after 5 changes");
+    await until(() => !els["control-note"].hidden &&
+                els["control-note"].textContent.includes("stopped changing the radio"), "runaway note");
+    console.log("8 ok: runaway Kiwi stopped after 5 changes:", els["control-note"].textContent);
+
     const sets = serverLog.split("\n").filter((l) => l.includes("Kiwi -> radio: VFO"));
     console.log("radio sets made:\n  " + sets.join("\n  "));
     console.log("PAGE E2E PASSED");

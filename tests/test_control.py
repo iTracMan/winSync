@@ -314,3 +314,24 @@ def test_redirect_is_only_decided_while_a_and_b_differ():
     c.freq_b, c._zzfa = 14_200_000, 14_200_000       # ...until ZZFA; reports VFO B
     c._check_redirect()
     assert c.cat_to_b is True
+
+
+def test_runaway_kiwi_stops_control():
+    """A Kiwi that keeps moving on its own (stuck auto-repeat step, a loop): after RUNAWAY_SETS
+    changes within RUNAWAY_WINDOW s nothing more is sent until Control is chosen again."""
+    notes = []
+    c, _ = ready_client(0)
+    c.on_note = notes.append
+    sent = []
+    for i in range(cat.RUNAWAY_SETS + 3):
+        assert c.request_tune(7_160_990 - 10 * i) is None or c._fault
+        sets = c._take_sets()
+        if sets:
+            sent.append(sets)
+            c.freq_a = 7_160_990 - 10 * i
+    assert len(sent) == cat.RUNAWAY_SETS
+    assert "stopped changing the radio" in c.request_tune(7_100_000)
+    c._update_note()
+    assert "more than 5 times" in notes[-1]
+    c.set_control("both")
+    assert c.request_tune(7_100_000) is None and c._take_sets() == b"ZZFA00007100000;"

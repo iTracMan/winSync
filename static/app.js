@@ -77,7 +77,9 @@ function apply() {
   applyMute();
   watchKiwi();
   if (!syncOn || radio.freq_hz == null) return;
-  if (!force && (control === "kiwi" || Date.now() < radioHoldUntil)) return;   // Kiwi leads
+  // Kiwi leads: in "kiwi" mode, and while a Kiwi -> radio change is in flight or just made (the
+  // radio's echo of it may arrive before the server's answer, and must not retune the Kiwi)
+  if (!force && (control === "kiwi" || tuneInFlight || Date.now() < radioHoldUntil)) return;
   if (!radio.kiwi_mode) {
     if (radio.mode_label) setMsg("Not applied: no receiver mode for " + radio.mode_label, true);
     return;
@@ -140,7 +142,12 @@ function connectWs() {
   const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/_winsync/ws");
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
-    if (m.type === "state") { radio = m; control = m.control || "radio"; render(); }
+    if (m.type === "state") {
+      // Choosing Control must not itself move the radio to wherever the Kiwi was left: the Kiwi's
+      // current position becomes the starting point and only tuning after this counts.
+      if ((m.control || "radio") !== control) watch.quiet(Date.now(), 0);
+      radio = m; control = m.control || "radio"; render();
+    }
   };
   ws.onclose = () => {
     radio.cat_connected = false;

@@ -30,6 +30,7 @@ answers 0). So with follow="auto" the Kiwi follows VFO A while RX2 is off, and w
 VFO was tuned (frequency or mode) last. follow="A" or "B" fixes it.
 """
 import asyncio
+import collections
 import logging
 import re
 import time
@@ -56,6 +57,7 @@ SET_MODE = (b"ZZMD", b"ZZME")
 TX_HOLDOFF = 1.0                   # s after TX ends before the radio may be changed
 FRESH = 0.5                        # s: a set needs a full reading at most this old
 VERIFY_SAMPLES = 3                 # readings within which a set must show up on its VFO
+RUNAWAY_SETS, RUNAWAY_WINDOW = 5, 6.0   # more changes than this in this many s: control stops
 
 
 class UnsafeCommand(AssertionError):
@@ -137,6 +139,7 @@ class CatClient:
         self._sets_in_flight = 0
         self._sampled_at = float("-inf")
         self._tx_ended = float("-inf")
+        self._recent_sets = collections.deque()   # times of recent Kiwi -> radio changes
         self.freq_a = self.mode_a = None
         self.freq_b = self.mode_b = None
         self.rx2 = False
@@ -186,6 +189,7 @@ class CatClient:
             raise ValueError(f"control must be one of {CONTROL_MODES}")
         self.control = control
         self._fault = None           # choosing a control mode again clears a stopped one
+        self._recent_sets.clear()
         if control == "radio":
             self._want = None
         self._update_note()
@@ -261,6 +265,8 @@ class CatClient:
             cmds += SET_FREQ[vfo] + b"%011d;" % freq
         if mode is not None and mode != cur_mode:
             cmds += SET_MODE[vfo] + b"%02d;" % mode
+        if cmds and self._runaway():
+            return b""
         if cmds:
             log.info("Kiwi -> radio: VFO %s %s Hz%s", "AB"[vfo], freq,
                      "" if mode is None else f" mode {mode}")
@@ -396,6 +402,22 @@ class CatClient:
         self._select()
         self._emit()
         self._update_note()
+
+    def _runaway(self):
+        """More than RUNAWAY_SETS changes within RUNAWAY_WINDOW s is not someone tuning the Kiwi by
+        hand (a drag only sends where it stops): something is moving it, e.g. a stuck auto-repeat
+        step button or a loop. Stop changing the radio until Control is chosen again."""
+        now = time.monotonic()
+        while self._recent_sets and now - self._recent_sets[0] > RUNAWAY_WINDOW:
+            self._recent_sets.popleft()
+        if len(self._recent_sets) >= RUNAWAY_SETS:
+            self._fault = (f"the Kiwi asked to change the radio more than {RUNAWAY_SETS} times in "
+                           f"{RUNAWAY_WINDOW:g} s, so winSync has stopped changing the radio "
+                           "(choose Control again to retry)")
+            log.error("Kiwi -> radio stopped: %s", self._fault)
+            return True
+        self._recent_sets.append(now)
+        return False
 
     def _check_redirect(self):
         """Is MI0BOT's "CAT to VFO B" on? Then ZZFA; answers with VFO B while ZZIF; still reports

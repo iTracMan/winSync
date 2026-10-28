@@ -62,6 +62,14 @@ Verified, live on mas-laptop with SDR Console v3.4 (Adalm Pluto Plus, QO-100), T
   * Mute on TX with a short QO-100 transmission works.
   * Stop closes COM23; closing the window with X releases it; reopening and Start connects with no
     "in use".
+Verified, live on mas-laptop after the follow-up changes, 2026-10-28
+  * The window and the page show the new Control labels; out of band says "(receiver only)"; OmniRig
+    says "OmniRig is read-only: tuning the receiver doesn't move the radio".
+  * The window reopens on the Radio last started (SDR Console; OmniRig Rig 2), and on [cat] source
+    from config.toml when last_radio.json is missing.
+  * Thetis, cat.py wording: in Both, "receiver -> radio" moved VFO A inside a UK band; outside a UK
+    band the change was refused ("outside the UK amateur bands"); with Radio controls receiver the
+    radio was not moved.
 
 2026-10-21 - v1.2: OmniRig as a read-only source for other radios
 -----------------------------------------------------------------

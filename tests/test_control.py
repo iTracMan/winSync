@@ -114,7 +114,7 @@ def test_refused_in_every_unsafe_state():
             c._send(b"ZZFA00007074000;", sets=True)
         assert written == [] and c._want is None
 
-    refused(lambda c: setattr(c, "control", "radio"), "Radio controls Kiwi")
+    refused(lambda c: setattr(c, "control", "radio"), "Radio controls receiver")
     refused(lambda c: setattr(c, "tx", True), "transmitting")
     refused(lambda c: setattr(c, "_tx_ended", time.monotonic()), "transmitting")   # hold-off
     refused(lambda c: setattr(c, "_sampled_at", time.monotonic() - 1), "fresh")
@@ -246,7 +246,7 @@ def test_radio_control_sends_v1_reads_only():
         fake = FakeThetis()
         client, _ = await started(fake)              # control defaults to "radio"
         await until(lambda: client.freq_hz is not None)
-        assert client.request_tune(7_074_000, 1) == "Control is set to Radio controls Kiwi"
+        assert client.request_tune(7_074_000, 1) == "Control is set to Radio controls receiver"
         await asyncio.sleep(0.3)
         assert set(fake.received) == {"ZZIF", "ZZFB", "ZZME", "ZZRS", "ZZXV"}
         assert fake.freq_a == 14_200_000

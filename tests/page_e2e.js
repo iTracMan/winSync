@@ -34,7 +34,7 @@ const server = spawn(PY, ["-m", "winSync", "--config", path.join(TMP, "e2e.toml"
 server.stdout.on("data", (d) => (serverLog += d));
 server.stderr.on("data", (d) => (serverLog += d));
 const thetis = (line) => fake.stdin.write(line + "\n");
-const radioSets = () => (serverLog.match(/Kiwi -> radio: VFO/g) || []).length;
+const radioSets = () => (serverLog.match(/receiver -> radio: VFO/g) || []).length;
 
 // ---- stub DOM -------------------------------------------------------------------------------
 function el(id) {
@@ -181,7 +181,7 @@ async function setControl(v) {
                 els["control-note"].textContent.includes("stopped changing the radio"), "runaway note");
     console.log("8 ok: runaway Kiwi stopped after 5 changes:", els["control-note"].textContent);
 
-    const sets = serverLog.split("\n").filter((l) => l.includes("Kiwi -> radio: VFO"));
+    const sets = serverLog.split("\n").filter((l) => l.includes("receiver -> radio: VFO"));
     console.log("radio sets made:\n  " + sets.join("\n  "));
     console.log("PAGE E2E PASSED");
     process.exitCode = 0;

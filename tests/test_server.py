@@ -216,7 +216,7 @@ def test_kiwi_to_radio_api():
         # Default: radio controls Kiwi, so the radio is never moved
         r = await client.post("/_winsync/api/tune", json={"freq_hz": 7_074_000, "kiwi_mode": "usb"})
         j = await r.json()
-        assert j["moved"] is False and "Radio controls Kiwi" in j["message"]
+        assert j["moved"] is False and "Radio controls receiver" in j["message"]
 
         r = await client.post("/_winsync/api/control", json={"control": "both"})
         assert (await r.json())["control"] == "both"

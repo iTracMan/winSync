@@ -6,7 +6,7 @@ import threading
 
 from aiohttp import web
 
-from . import omnirig
+from . import omnirig, sdrconsole
 from .server import build_app, load_config
 
 
@@ -20,6 +20,7 @@ def exit_when_parent_goes():
         except (OSError, ValueError):
             pass
         omnirig.release_all()    # else OmniRig keeps running and polling the radio
+        sdrconsole.release_all()    # close the SDR Console COM port
         os._exit(0)
     threading.Thread(target=watch, daemon=True).start()
 

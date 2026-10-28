@@ -1,2 +1,3 @@
 aiohttp>=3.11
 pywin32>=306
+pyserial>=3.5

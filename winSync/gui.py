@@ -3,6 +3,7 @@ output. Started by winSync.cmd (or the shortcuts it makes) as `.venv\\Scripts\\p
 winSync.gui`. Uses only tkinter, which the python.org / winget Python includes.
 """
 import atexit
+import json
 import os
 import queue
 import re
@@ -155,6 +156,47 @@ def read_source(root=ROOT):
     return ("thetis", None)
 
 
+def last_radio_path(root=ROOT):
+    """Where the last Radio choice is remembered: beside urls.json, i.e. in the folder of
+    [server] urls_file if set, otherwise %APPDATA%\\winSync. Not in config.toml, so its comments stay."""
+    custom = read_config(root).get("server", {}).get("urls_file")
+    if isinstance(custom, str) and custom.strip():
+        folder = (Path(root) / Path(custom.strip()).expanduser()).parent
+    else:
+        folder = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming") / "winSync"
+    return folder / "last_radio.json"
+
+
+def load_last_radio(path):
+    """The remembered Radio choice as a key of SOURCE_CHOICES, or None if there isn't a usable one."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            saved = json.load(f)
+        key = (saved["source"], saved.get("rig"))
+        return key if key in SOURCE_CHOICES else None
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return None
+
+
+def save_last_radio(path, key):
+    """Remember the Radio choice. Returns an error message, or None if it was saved."""
+    source, rig = key
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps({"source": source, "rig": rig}), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError as e:
+        return f"could not remember the Radio choice in {path}: {e}"
+    return None
+
+
+def initial_source(root=ROOT, path=None):
+    """The Radio choice the window opens on: the one remembered from the last Start, or [cat] source
+    from config.toml on first run or if the remembered one is missing or unreadable."""
+    return load_last_radio(path or last_radio_path(root)) or read_source(root)
+
+
 def read_sdrconsole_port(root=ROOT):
     """[sdrconsole] port from config.toml (winSync's end of the com0com pair)."""
     return str(read_config(root).get("sdrconsole", {}).get("port", "COM23"))
@@ -283,6 +325,7 @@ class App:
         import tkinter as tk
         self.tk = tk
         self.server = ServerProcess()
+        self.last_radio = last_radio_path()
         self.stopping = False
         self.port_busy = False
 
@@ -344,7 +387,7 @@ class App:
             m.pack(side="left")
             return m
         # Where the radio's state comes from: Thetis's TCP/IP CAT, or OmniRig (read-only)
-        self.source = tk.StringVar(value=SOURCE_CHOICES[read_source()])
+        self.source = tk.StringVar(value=SOURCE_CHOICES[initial_source(path=self.last_radio)])
         self.source_menu = menu("Radio", self.source, SOURCE_CHOICES.values(), 13,
                                 command=lambda _: self._source_changed())
         self.control = tk.StringVar(value=CONTROL_CHOICES[read_control()])
@@ -478,6 +521,9 @@ class App:
             self.port_busy = False
             self._append(f"--- winSync started (Radio: {self.source.get()}, "
                          f"Control: {CONTROL_CHOICES[control]}) ---", "note")
+            problem = save_last_radio(self.last_radio, (source, rig))   # opens on this next time
+            if problem:
+                self._append(f"--- {problem} ---", "warn")
             self._set_status("Running", OK)
         self._update_buttons()
 

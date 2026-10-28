@@ -22,6 +22,10 @@ Added
     (https://eshail.batc.org.uk/nb/). Thetis and OmniRig still use [kiwi] url (M0CKE Kiwi).
   * tests/fake_sdrconsole.py (over TCP via pyserial socket://, or on a COM port), tests/test_sdrconsole.py,
     tests/test_page_sources.js, and server, window and launcher tests.
+  * The window remembers the Radio choice (including the OmniRig rig number) each time Start is pressed
+    and opens on it next time. It is saved in last_radio.json beside urls.json (%APPDATA%\winSync, or
+    the folder of [server] urls_file), not in config.toml, so its comments are left alone. First run, or
+    a missing or unreadable file: the window opens on [cat] source from config.toml, with no error.
 Changed
   * A receiver URL keeps its path (https://eshail.batc.org.uk/nb/): the whole site is still proxied at
     the root, and the page opens the receiver at its path. URLs at the root behave exactly as before.
@@ -46,7 +50,17 @@ Verified, with the fake SDR Console only (no radio), 2026-10-28
     errors.
   * Upgrade: pyserial removed from a .venv; the new launcher check sent it to setup, which added
     pyserial 3.5 with no questions.
-  * Not yet tested live with SDR Console and the radio.
+Verified, live on mas-laptop with SDR Console v3.4 (Adalm Pluto Plus, QO-100), Thetis and OmniRig,
+2026-10-28 (before the two follow-up changes: "receiver" wording and remembering the Radio)
+  * Thetis: the M0CKE Kiwi follows the VFO and mode; Mute on TX works with TUNE.
+  * OmniRig Rig 1 (TS-2000) starts and follows. "OmniRig does not report a mode" appeared once at start
+    and cleared on the next reading; omnirig.py's behaviour is unchanged from v1.2, so this is existing
+    behaviour.
+  * SDR Console: Goonhilly opens at /nb/, audio and waterfall work, and it follows the receive
+    frequency and mode (mode changed in SDR Console's Receive panel). NA; answered "Pluto_SDR_HOME".
+  * Mute on TX with a short QO-100 transmission works.
+  * Stop closes COM23; closing the window with X releases it; reopening and Start connects with no
+    "in use".
 
 2026-10-21 - v1.2: OmniRig as a read-only source for other radios
 -----------------------------------------------------------------

@@ -53,8 +53,10 @@ If Windows SmartScreen asks about `winSync.cmd` the first time, choose *More inf
 
 1. Start Thetis with the TCP/IP CAT server on, then tick
    **"Thetis is running and its TCP/IP CAT server is enabled"**. Start stays greyed out until you do.
-   **Radio** (default `[cat] source` in `config.toml`) chooses Thetis, OmniRig Rig 1 / Rig 2 or SDR
-   Console; with OmniRig or SDR Console the box asks you to confirm that instead.
+   **Radio** chooses Thetis, OmniRig Rig 1 / Rig 2 or SDR Console; with OmniRig or SDR Console the box
+   asks you to confirm that instead. The window remembers the Radio you last started with (in
+   `%APPDATA%\winSync\last_radio.json`, beside `urls.json`) and opens on it next time; the first time,
+   or if that file is missing or unreadable, it opens on `[cat] source` from `config.toml`.
 2. Press **Start winSync**. Its output scrolls in the field below; **Stop winSync** stops it.
    **Control** (below the Start button, default `[sync] control` in `config.toml`) chooses two-way sync
    when winSync starts: Radio controls receiver, Receiver controls radio or Both. While winSync runs it is
@@ -299,8 +301,8 @@ url = "https://eshail.batc.org.uk/nb/"   # the receiver used with SDR Console
   unmutes. (The 1 s "after TX" hold-off in Behaviour notes is for two-way sync, which SDR Console doesn't
   have.) Through the satellite and the WebSDR's own audio buffer you may still hear the very end of your
   own signal after you return to receive.
-* The page shows **SDR Console: connected (name)**, with the name from `NA;` (the reply's exact form was not
-  seen live; winSync takes whatever follows `NA`). When something is wrong it says what:
+* The page shows **SDR Console: connected (name)**, with the name from `NA;` (winSync shows whatever follows
+  `NA`; on mas-laptop it showed "Pluto_SDR_HOME"). When something is wrong it says what:
   * *COM23 does not exist*: the com0com pair is missing, or `[sdrconsole] port` is wrong;
   * *COM23 is in use by another program*: winSync is already running, or SDR Console was set to COM23
     instead of COM22;

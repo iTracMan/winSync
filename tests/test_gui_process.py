@@ -305,3 +305,80 @@ def test_control_labels_say_receiver():
     select = re.search(r'<select id="control">(.*?)</select>', html).group(1)
     assert dict(re.findall(r'<option value="(\w+)">([^<]+)</option>', select)) == CONTROL_CHOICES
     assert omnirig.READ_ONLY == "winSync only reads from OmniRig, so the receiver can't change the radio"
+
+
+def test_last_radio_is_kept_beside_urls_json(tmp_path, monkeypatch):
+    from winSync.gui import last_radio_path
+    monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+    assert last_radio_path(tmp_path) == tmp_path / "Roaming" / "winSync" / "last_radio.json"
+    (tmp_path / "config.toml").write_text(f'[server]\nurls_file = {str(tmp_path / "x" / "u.json")!r}\n')
+    assert last_radio_path(tmp_path) == tmp_path / "x" / "last_radio.json"
+    (tmp_path / "config.toml").write_text('[server]\nurls_file = "data/urls.json"\n')   # relative: as the server
+    assert last_radio_path(tmp_path) == tmp_path / "data" / "last_radio.json"
+
+
+def test_every_radio_choice_is_remembered(tmp_path):
+    from winSync.gui import SOURCE_CHOICES, initial_source, save_last_radio
+    path = tmp_path / "AppData" / "winSync" / "last_radio.json"      # folder made on first save
+    (tmp_path / "config.toml").write_text('[cat]\nsource = "omnirig"\n[omnirig]\nrig = 2\n')
+    for key in SOURCE_CHOICES:
+        assert save_last_radio(path, key) is None
+        assert initial_source(tmp_path, path) == key
+    assert not path.with_name("last_radio.json.tmp").exists()
+
+
+def test_first_run_or_bad_file_opens_on_config_source(tmp_path):
+    from winSync.gui import initial_source, load_last_radio
+    path = tmp_path / "last_radio.json"
+    assert initial_source(tmp_path, path) == ("thetis", None)                 # no config, no file
+    (tmp_path / "config.toml").write_text('[cat]\nsource = "sdrconsole"\n')
+    assert initial_source(tmp_path, path) == ("sdrconsole", None)             # first run
+    for bad in ("", "not json", "[]", "null", '"omnirig"', "{}", '{"source": "omnirig", "rig": 3}',
+                '{"source": "kenwood"}', '{"source": ["thetis"]}', '{"rig": 1}'):
+        path.write_text(bad)
+        assert load_last_radio(path) is None, bad
+        assert initial_source(tmp_path, path) == ("sdrconsole", None), bad
+    path.write_bytes(b"\xff\xfe\x00garbage")
+    assert initial_source(tmp_path, path) == ("sdrconsole", None)
+    path.unlink()
+    path.mkdir()                                                             # unreadable: a folder
+    assert initial_source(tmp_path, path) == ("sdrconsole", None)
+
+
+def test_save_failure_is_reported_not_raised(tmp_path):
+    from winSync.gui import save_last_radio
+    (tmp_path / "file").write_text("")
+    problem = save_last_radio(tmp_path / "file" / "last_radio.json", ("thetis", None))
+    assert problem and problem.startswith("could not remember the Radio choice")
+
+
+def test_start_remembers_the_radio(tmp_path):
+    """Pressing Start saves the Radio choice (with the OmniRig rig number); a failed start doesn't."""
+    from types import SimpleNamespace
+    from winSync.gui import App, CONTROL_CHOICES, SOURCE_CHOICES, initial_source
+
+    class Var:
+        def __init__(self, v): self.v = v
+        def get(self): return self.v
+
+    started, lines = [], []
+    def app_with(source_key, fail=None):
+        def start(**kw):
+            if fail:
+                raise fail
+            started.append(kw)
+        return SimpleNamespace(
+            server=SimpleNamespace(running=False, start=start), stopping=False, port_busy=False,
+            last_radio=tmp_path / "w" / "last_radio.json", control=Var(CONTROL_CHOICES["radio"]),
+            source=Var(SOURCE_CHOICES[source_key]), _source_key=lambda: source_key,
+            messagebox=SimpleNamespace(showerror=lambda *a: lines.append(a)),
+            _append=lambda text, tag=None: lines.append(text), _set_status=lambda *a: None,
+            _update_buttons=lambda: None)
+
+    App._toggle(app_with(("omnirig", 2)))
+    assert started[-1] == {"control": "radio", "source": "omnirig", "rig": 2}
+    assert initial_source(tmp_path, tmp_path / "w" / "last_radio.json") == ("omnirig", 2)
+    App._toggle(app_with(("sdrconsole", None)))
+    assert initial_source(tmp_path, tmp_path / "w" / "last_radio.json") == ("sdrconsole", None)
+    App._toggle(app_with(("thetis", None), fail=OSError("no python")))         # did not start
+    assert initial_source(tmp_path, tmp_path / "w" / "last_radio.json") == ("sdrconsole", None)

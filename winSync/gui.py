@@ -3,6 +3,7 @@ output. Started by winSync.cmd (or the shortcuts it makes) as `.venv\\Scripts\\p
 winSync.gui`. Uses only tkinter, which the python.org / winget Python includes.
 """
 import atexit
+import json
 import os
 import queue
 import re
@@ -19,10 +20,11 @@ DEFAULT_CAT_PORT = 13013
 DEFAULT_WEB_PORT = 8090
 WEBSDR_MAP_URL = "https://rx-tx.info/map-sdr-points#close"
 # Two-way sync: [sync] control / --control value -> label in the window (and on the page)
-CONTROL_CHOICES = {"radio": "Radio controls Kiwi", "kiwi": "Kiwi controls radio", "both": "Both"}
+CONTROL_CHOICES = {"radio": "Radio controls receiver", "kiwi": "Receiver controls radio", "both": "Both"}
 # Where the radio's state comes from: ([cat] source, [omnirig] rig) -> label in the window
 SOURCE_CHOICES = {("thetis", None): "Thetis", ("omnirig", 1): "OmniRig Rig 1",
-                  ("omnirig", 2): "OmniRig Rig 2"}
+                  ("omnirig", 2): "OmniRig Rig 2", ("sdrconsole", None): "SDR Console"}
+READ_ONLY_SOURCES = ("omnirig", "sdrconsole")      # Control is fixed to Radio controls receiver
 MAX_LOG_LINES = 5000
 POLL_MS = 100
 # "Address already in use" as aiohttp reports it on Windows (WSAEADDRINUSE) and elsewhere
@@ -149,7 +151,55 @@ def read_source(root=ROOT):
     if cfg.get("cat", {}).get("source") == "omnirig":
         rig = cfg.get("omnirig", {}).get("rig", 1)
         return ("omnirig", rig if rig in (1, 2) else 1)
+    if cfg.get("cat", {}).get("source") == "sdrconsole":
+        return ("sdrconsole", None)
     return ("thetis", None)
+
+
+def last_radio_path(root=ROOT):
+    """Where the last Radio choice is remembered: beside urls.json, i.e. in the folder of
+    [server] urls_file if set, otherwise %APPDATA%\\winSync. Not in config.toml, so its comments stay."""
+    custom = read_config(root).get("server", {}).get("urls_file")
+    if isinstance(custom, str) and custom.strip():
+        folder = (Path(root) / Path(custom.strip()).expanduser()).parent
+    else:
+        folder = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming") / "winSync"
+    return folder / "last_radio.json"
+
+
+def load_last_radio(path):
+    """The remembered Radio choice as a key of SOURCE_CHOICES, or None if there isn't a usable one."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            saved = json.load(f)
+        key = (saved["source"], saved.get("rig"))
+        return key if key in SOURCE_CHOICES else None
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return None
+
+
+def save_last_radio(path, key):
+    """Remember the Radio choice. Returns an error message, or None if it was saved."""
+    source, rig = key
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps({"source": source, "rig": rig}), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError as e:
+        return f"could not remember the Radio choice in {path}: {e}"
+    return None
+
+
+def initial_source(root=ROOT, path=None):
+    """The Radio choice the window opens on: the one remembered from the last Start, or [cat] source
+    from config.toml on first run or if the remembered one is missing or unreadable."""
+    return load_last_radio(path or last_radio_path(root)) or read_source(root)
+
+
+def read_sdrconsole_port(root=ROOT):
+    """[sdrconsole] port from config.toml (winSync's end of the com0com pair)."""
+    return str(read_config(root).get("sdrconsole", {}).get("port", "COM23"))
 
 
 def read_cat_port(root=ROOT):
@@ -275,6 +325,7 @@ class App:
         import tkinter as tk
         self.tk = tk
         self.server = ServerProcess()
+        self.last_radio = last_radio_path()
         self.stopping = False
         self.port_busy = False
 
@@ -302,7 +353,8 @@ class App:
         if self.version:
             tk.Label(title_row, text=self.version, bg=PANEL, fg=MUTED,
                      font=("TkDefaultFont", 10)).pack(side="left", padx=(6, 0), pady=(6, 0))
-        tk.Label(titles, text="Keeps a KiwiSDR or WebSDR tuned to Thetis, or a radio through OmniRig", bg=PANEL, fg=MUTED
+        tk.Label(titles, text="Keeps a KiwiSDR or WebSDR tuned to Thetis, a radio through OmniRig, "
+                 "or SDR Console", bg=PANEL, fg=MUTED
                  ).pack(anchor="w")
 
         # Step 1: the user confirms Thetis (or OmniRig) is running
@@ -335,7 +387,7 @@ class App:
             m.pack(side="left")
             return m
         # Where the radio's state comes from: Thetis's TCP/IP CAT, or OmniRig (read-only)
-        self.source = tk.StringVar(value=SOURCE_CHOICES[read_source()])
+        self.source = tk.StringVar(value=SOURCE_CHOICES[initial_source(path=self.last_radio)])
         self.source_menu = menu("Radio", self.source, SOURCE_CHOICES.values(), 13,
                                 command=lambda _: self._source_changed())
         self.control = tk.StringVar(value=CONTROL_CHOICES[read_control()])
@@ -372,7 +424,8 @@ class App:
         atexit.register(lambda: self.server.stop(blocking=True))
         self._source_changed(first=True)
         self._append("Tick the box above once Thetis is running with its TCP/IP CAT server on "
-                     "(or OmniRig is set up for your radio), then press Start winSync.", "note")
+                     "(or OmniRig is set up for your radio, or SDR Console has its CAT serial port "
+                     "on), then press Start winSync.", "note")
         win.after(POLL_MS, self._poll)
 
     def _load_icons(self):
@@ -395,12 +448,16 @@ class App:
         return next(k for k, v in SOURCE_CHOICES.items() if v == self.source.get())
 
     def _source_changed(self, first=False):
-        """The checkbox says what to confirm for this source. OmniRig is read-only, so Control is
-        fixed to Radio controls Kiwi."""
+        """The checkbox says what to confirm for this source. OmniRig and SDR Console are
+        read-only, so Control is fixed to Radio controls receiver."""
         source, rig = self._source_key()
         if source == "omnirig":
             self.check.configure(text=f"OmniRig is installed and its Rig {rig} is set up for your "
                                       "radio (OmniRig Settings: rig type, COM port, baud rate)")
+            self.control.set(CONTROL_CHOICES["radio"])
+        elif source == "sdrconsole":
+            self.check.configure(text="SDR Console is running with its CAT serial port ticked (Program "
+                                      f"Options > Controllers > CAT); winSync uses {read_sdrconsole_port()}")
             self.control.set(CONTROL_CHOICES["radio"])
         else:
             self.check.configure(text="Thetis is running and its TCP/IP CAT server is enabled "
@@ -421,8 +478,8 @@ class App:
         self.check.configure(state="disabled" if running or self.stopping else "normal")
         locked = running or self.stopping
         self.source_menu.configure(state="disabled" if locked else "normal")
-        omnirig = self._source_key()[0] == "omnirig"
-        self.control_menu.configure(state="disabled" if locked or omnirig else "normal")
+        read_only = self._source_key()[0] in READ_ONLY_SOURCES
+        self.control_menu.configure(state="disabled" if locked or read_only else "normal")
         self.open_button.configure(state="normal" if running and not self.stopping else "disabled")
 
     def _open_page(self):
@@ -464,6 +521,9 @@ class App:
             self.port_busy = False
             self._append(f"--- winSync started (Radio: {self.source.get()}, "
                          f"Control: {CONTROL_CHOICES[control]}) ---", "note")
+            problem = save_last_radio(self.last_radio, (source, rig))   # opens on this next time
+            if problem:
+                self._append(f"--- {problem} ---", "warn")
             self._set_status("Running", OK)
         self._update_buttons()
 

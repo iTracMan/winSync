@@ -18,7 +18,13 @@ let zoomOnBand = true;
 let lastApplied = null;                    // {freq_hz, kiwi_mode, band} last pushed to Kiwi
 let force = false;                         // set to re-push even if unchanged (Resync / Kiwi reload)
 let serverDown = false;                    // the page has lost the winSync server
-const OMNIRIG_READ_ONLY = "OmniRig is read-only: tuning the Kiwi doesn't move the radio";
+const OMNIRIG_READ_ONLY = "OmniRig is read-only: tuning the receiver doesn't move the radio";
+const SOURCE_LABELS = { thetis: "Thetis", omnirig: "OmniRig", sdrconsole: "SDR Console" };
+// Read-only sources: no Kiwi -> radio, and the page always says so
+const READ_ONLY_NOTES = {
+  omnirig: OMNIRIG_READ_ONLY,
+  sdrconsole: "SDR Console is read-only: tuning the receiver doesn't move the radio",
+};
 let control = "radio";                     // "radio", "kiwi" or "both" (from the server)
 let radioHoldUntil = 0;
 let tuneInFlight = false;
@@ -35,7 +41,7 @@ function diagReadback(b) {
   if (!diagOn || !b || !b.ready()) return;
   const rb = b.readback();
   const s = rb ? rb.freq_hz + " " + rb.mode : "none";
-  if (s !== diagLastRb) { diag("Kiwi readback " + s); diagLastRb = s; }
+  if (s !== diagLastRb) { diag("receiver readback " + s); diagLastRb = s; }
 }
 function diagFlush() {
   if (!diagEvents.length) return;
@@ -68,27 +74,32 @@ function fmtFreq(hz) {
 
 function render() {
   const omni = radio.source === "omnirig";   // read-only OmniRig source: no RX2, no Kiwi -> radio
+  const sdrc = radio.source === "sdrconsole"; // read-only SDR Console: one receiver, no VFOs
+  const readOnly = radio.source in READ_ONLY_NOTES;
+  const label = SOURCE_LABELS[radio.source] || "Thetis";
   if (serverDown) chip("cat-chip", "winSync server: reconnecting…", "bad");   // radio state is stale
-  else chip("cat-chip", (omni ? "OmniRig" : "Thetis") + (radio.cat_connected ? ": connected" : ": disconnected"),
+  else chip("cat-chip", label + (radio.cat_connected ? ": connected" : ": disconnected") +
+            (radio.cat_connected && radio.radio_name ? " (" + radio.radio_name + ")" : ""),
             radio.cat_connected ? "ok" : "bad");
   $("freq").textContent = fmtFreq(radio.freq_hz);
   $("mode").textContent = radio.mode_label || "—";
   $("band").textContent = radio.band || "—";
   $("txbadge").hidden = !radio.tx;
   const rx2 = radio.rx === 1;
-  $("rxvfo").textContent = omni ? (rx2 ? "VFO B" : "VFO A") : (rx2 ? "RX2 · VFO B" : "RX1 · VFO A");
+  $("rxvfo").textContent = sdrc ? "RX" : omni ? (rx2 ? "VFO B" : "VFO A") : (rx2 ? "RX2 · VFO B" : "RX1 · VFO A");
   $("rxvfo").className = rx2 ? "rx2" : "";
   const sel = $("follow");
   if (radio.follow && document.activeElement !== sel) sel.value = radio.follow;
+  sel.disabled = sdrc;                      // SDR Console reports one receiver
   const ctl = $("control");
   if (radio.control && document.activeElement !== ctl) ctl.value = radio.control;
-  ctl.disabled = omni;
-  ctl.title = omni ? "OmniRig is read-only in winSync: the radio controls the Kiwi" : "";
-  // OmniRig: always say it is read-only, after any OmniRig problem (not installed, not responding...)
-  const note = omni ? [radio.control_note, OMNIRIG_READ_ONLY].filter(Boolean).join(" · ")
-                    : radio.control_note || "";
+  ctl.disabled = readOnly;
+  ctl.title = readOnly ? label + " is read-only in winSync: the radio controls the receiver" : "";
+  // Read-only sources: always say so, after any problem (not installed, not answering...)
+  const note = readOnly ? [radio.control_note, READ_ONLY_NOTES[radio.source]].filter(Boolean).join(" · ")
+                        : radio.control_note || "";
   $("control-note").textContent = note;
-  $("control-note").hidden = !note || (radio.control === "radio" && !omni);
+  $("control-note").hidden = !note || (radio.control === "radio" && !readOnly);
   const b = bridge();
   const kind = (b && b.kind && b.kind()) || "Receiver";   // "Kiwi" or "WebSDR", from the bridge
   if (!frame.getAttribute("src")) chip("kiwi-chip", "Receiver: not connected", "");
@@ -121,7 +132,7 @@ function apply() {
   if (same && !force) return;
   const bandChanged = !lastApplied || lastApplied.band !== radio.band;
   watch.quiet(Date.now(), SETTLE_MS);      // this tune is ours, not the user's
-  diag("winSync tunes Kiwi " + radio.freq_hz + " " + radio.kiwi_mode + (force ? " (forced)" : ""));
+  diag("winSync tunes receiver " + radio.freq_hz + " " + radio.kiwi_mode + (force ? " (forced)" : ""));
   const res = b.tune(radio.freq_hz, radio.kiwi_mode,
                      { zoomToBand: zoomOnBand && bandChanged && radio.band !== "GEN" });
   force = false;
@@ -162,7 +173,7 @@ async function sendTune(change) {
       radioHoldUntil = Date.now() + RADIO_HOLD_MS;
       setMsg("Radio set to " + fmtFreq(j.freq_hz) + (j.kiwi_mode ? " " + j.kiwi_mode : ""));
     } else {
-      setMsg(j.message + (j.out_of_band ? " (Kiwi only)" : ""), true);
+      setMsg(j.message + (j.out_of_band ? " (receiver only)" : ""), true);
     }
   } catch (e) {
     setMsg("Could not reach the winSync server to tune the radio", true);
@@ -309,15 +320,17 @@ async function connectKiwi(url) {
     body: JSON.stringify({ url }),
   });
   const j = await r.json();
-  if (!r.ok) { setMsg(j.error || "Bad Kiwi URL", true); return; }
-  try { localStorage.setItem("winSync.kiwi", j.target); } catch (e) { /* storage may be blocked */ }
-  rememberUrl(j.target);
-  $("kiwi-url").value = j.target;
+  if (!r.ok) { setMsg(j.error || "Bad receiver URL", true); return; }
+  const page = j.page || j.target;          // with its path, e.g. https://eshail.batc.org.uk/nb/
+  try { localStorage.setItem("winSync.kiwi", page); } catch (e) { /* storage may be blocked */ }
+  rememberUrl(page);
+  $("kiwi-url").value = page;
   lastApplied = null;
   force = true;
   // No query string: Kiwi appends the page's query to its WebSocket URLs. Assigning src again
-  // re-navigates, giving a fresh Kiwi session; bridge.js is injected by the proxy.
-  frame.src = "/";
+  // re-navigates, giving a fresh Kiwi session; bridge.js is injected by the proxy. The whole site is
+  // proxied at the root; the receiver page itself may be below it (a WebSDR at /nb/).
+  frame.src = j.path || "/";
 }
 
 $("kiwi-form").addEventListener("submit", (e) => {
@@ -350,7 +363,7 @@ $("control").addEventListener("change", async (e) => {
 });
 $("resync").addEventListener("click", () => { force = true; apply(); });
 frame.addEventListener("load", () => {
-  diag("Kiwi page loaded");
+  diag("receiver page loaded");
   lastApplied = null; force = true;
   watch.quiet(Date.now(), LOAD_SETTLE_MS);
 });
@@ -372,7 +385,7 @@ frame.addEventListener("load", () => {
   await loadUrlsFromServer();
   let saved = null;
   try { saved = localStorage.getItem("winSync.kiwi"); } catch (e) { /* ignore */ }
-  const initial = cfg.target || saved;
+  const initial = cfg.page || cfg.target || saved;
   if (initial) { $("kiwi-url").value = initial; connectKiwi(initial); }
   connectWs();
   setInterval(() => { apply(); render(); }, APPLY_INTERVAL_MS);

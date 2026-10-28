@@ -7,7 +7,8 @@ setlocal
 cd /d "%~dp0"
 if /i "%~1"=="--setup" goto setup
 if /i "%~1"=="--uninstall" goto uninstall
-".venv\Scripts\python.exe" -c "import aiohttp, tkinter, win32com.client" >nul 2>&1 || goto setup
+rem Anything missing (e.g. pyserial, new in v1.3, on a v1.2 install) runs the setup, which adds it.
+".venv\Scripts\python.exe" -c "import aiohttp, tkinter, win32com.client, serial" >nul 2>&1 || goto setup
 
 :run
 start "" ".venv\Scripts\pythonw.exe" -m winSync.gui

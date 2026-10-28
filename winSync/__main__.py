@@ -6,7 +6,7 @@ import threading
 
 from aiohttp import web
 
-from . import omnirig
+from . import omnirig, sdrconsole
 from .server import build_app, load_config
 
 
@@ -20,25 +20,27 @@ def exit_when_parent_goes():
         except (OSError, ValueError):
             pass
         omnirig.release_all()    # else OmniRig keeps running and polling the radio
+        sdrconsole.release_all()    # close the SDR Console COM port
         os._exit(0)
     threading.Thread(target=watch, daemon=True).start()
 
 
 def main():
-    ap = argparse.ArgumentParser(description="winSync: keep a KiwiSDR or WebSDR tuned to Thetis (TCP/IP CAT)")
+    ap = argparse.ArgumentParser(description="winSync: keep a KiwiSDR or WebSDR tuned to Thetis (TCP/IP CAT), "
+                                             "a radio through OmniRig, or SDR Console")
     ap.add_argument("--config", default="config.toml")
     ap.add_argument("--follow", choices=("auto", "A", "B"),
                     help="VFO to follow (overrides [sync] follow in the config)")
     ap.add_argument("--control", choices=("radio", "kiwi", "both"),
                     help="two-way sync: which side tunes the other (overrides [sync] control)")
-    ap.add_argument("--source", choices=("thetis", "omnirig"),
+    ap.add_argument("--source", choices=("thetis", "omnirig", "sdrconsole"),
                     help="where the radio's state comes from (overrides [cat] source)")
     ap.add_argument("--rig", type=int, choices=(1, 2),
                     help="OmniRig rig number (overrides [omnirig] rig)")
     ap.add_argument("--dry-run", action="store_true",
                     help="testing: two-way sync decides as usual but never sends anything to the radio")
     ap.add_argument("--diag", action="store_true",
-                    help="testing: the page logs every Kiwi readback change and tune to this log")
+                    help="testing: the page logs every receiver readback change and tune to this log")
     ap.add_argument("--exit-with-stdin", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()

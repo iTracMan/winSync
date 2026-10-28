@@ -65,7 +65,7 @@ class UnsafeCommand(AssertionError):
 
 
 CAT_TO_B_NOTE = ("Thetis's CAT to VFO B option is on, so ZZFA/ZZMD would change VFO B: "
-                 "VFO A is not changed from the Kiwi")
+                 "VFO A is not changed from the receiver")
 
 
 def out_of_band(freq_hz):
@@ -206,7 +206,7 @@ class CatClient:
     def _refusal(self, vfo, freq_hz=None, mode=None):
         """Why the radio must not be changed now, or None if it may."""
         if self.control == "radio":
-            return "Control is set to Radio controls Kiwi"
+            return "Control is set to Radio controls receiver"
         if self._writer is None or self.freq_hz is None:
             return "Thetis is not connected"
         if vfo != self.vfo:
@@ -257,7 +257,7 @@ class CatClient:
         vfo, freq, mode = want
         reason = self._refusal(vfo, freq, mode)
         if reason:
-            log.info("Kiwi -> radio change dropped: %s", reason)
+            log.info("receiver -> radio change dropped: %s", reason)
             return b""
         cur_freq, cur_mode = (self.freq_a, self.mode_a) if vfo == 0 else (self.freq_b, self.mode_b)
         cmds = b""
@@ -268,7 +268,7 @@ class CatClient:
         if cmds and self._runaway():
             return b""
         if cmds:
-            log.info("Kiwi -> radio: VFO %s %s Hz%s", "AB"[vfo], freq,
+            log.info("receiver -> radio: VFO %s %s Hz%s", "AB"[vfo], freq,
                      "" if mode is None else f" mode {mode}")
             self._sent = (vfo, freq, mode, VERIFY_SAMPLES)
         return cmds
@@ -355,7 +355,7 @@ class CatClient:
             # Thetis answers in order and a set it accepts gets no reply, so a "?" before the
             # batch's first answer is a refused set. It is not one of the batch's answers.
             self._sets_in_flight -= 1
-            log.warning("Thetis refused a Kiwi -> radio set command")
+            log.warning("Thetis refused a receiver -> radio set command")
             return
         if parsed:
             self._sets_in_flight = 0
@@ -411,10 +411,10 @@ class CatClient:
         while self._recent_sets and now - self._recent_sets[0] > RUNAWAY_WINDOW:
             self._recent_sets.popleft()
         if len(self._recent_sets) >= RUNAWAY_SETS:
-            self._fault = (f"the Kiwi asked to change the radio more than {RUNAWAY_SETS} times in "
+            self._fault = (f"the receiver asked to change the radio more than {RUNAWAY_SETS} times in "
                            f"{RUNAWAY_WINDOW:g} s, so winSync has stopped changing the radio "
                            "(choose Control again to retry)")
-            log.error("Kiwi -> radio stopped: %s", self._fault)
+            log.error("receiver -> radio stopped: %s", self._fault)
             return True
         self._recent_sets.append(now)
         return False
@@ -448,7 +448,7 @@ class CatClient:
             self._sent = None
             self._fault = (f"a change meant for VFO {'AB'[vfo]} moved VFO {'BA'[vfo]}, so winSync "
                            "has stopped changing the radio (choose Control again to retry)")
-            log.error("Kiwi -> radio stopped: %s", self._fault)
+            log.error("receiver -> radio stopped: %s", self._fault)
         elif left <= 1:
             self._sent = None
             log.warning("Thetis did not take the change to VFO %s %s Hz (VFO locked?)", "AB"[vfo], freq)

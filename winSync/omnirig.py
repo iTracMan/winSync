@@ -46,7 +46,7 @@ OMNIRIG_MODES = {
 # Everything else (VFOAA, VFOAB, VFOA, unknown) counts as VFO A.
 VFO_B_FLAGS = frozenset({0x200, 0x400, 0x1000})
 CLASS_NOT_REGISTERED = (-2147221005, -2147221164)     # CO_E_CLASSSTRING, REGDB_E_CLASSNOTREG
-READ_ONLY = "winSync only reads from OmniRig, so the Kiwi can't change the radio"
+READ_ONLY = "winSync only reads from OmniRig, so the receiver can't change the radio"
 NOT_INSTALLED = "OmniRig is not installed (https://www.dxatlas.com/OmniRig/)"
 
 
@@ -269,7 +269,7 @@ class OmniRigSource:
                            "report TX, so Mute on TX can't work")
         elif values.get("Mode") is not None and values.get("Mode") not in OMNIRIG_MODES:
             self._set_note("OmniRig does not report a mode winSync knows for this radio, so the "
-                           "Kiwi is not tuned")
+                           "receiver is not tuned")
         else:
             self._set_note(None)
         self._update()

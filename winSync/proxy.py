@@ -29,14 +29,28 @@ _HEAD_RE = re.compile(r"<head[^>]*>", re.I)
 
 
 def normalize_target(url):
-    """Reduce a user-entered Kiwi URL to scheme://host[:port]. Raises ValueError if unusable."""
+    """Reduce a user-entered receiver URL to scheme://host[:port]. Raises ValueError if unusable."""
     url = url.strip()
     if "://" not in url:
         url = "http://" + url
     u = URL(url)
     if u.scheme not in ("http", "https") or not u.host:
-        raise ValueError("Kiwi URL must be http(s)://host[:port]")
+        raise ValueError("receiver URL must be http(s)://host[:port]")
     return str(u.origin())
+
+
+def page_target(url):
+    """A user-entered receiver URL -> (origin for the proxy, path of the receiver page, page URL).
+    The whole site is proxied at the root (WebSDR pages use root paths such as /~~stream even when
+    the page itself is elsewhere), but the page may live below it, e.g. Goonhilly's QO-100 WebSDR at
+    https://eshail.batc.org.uk/nb/. No query string: Kiwi appends the page's query to its WebSocket
+    URLs. With path "/" the page URL is the bare origin, as before."""
+    origin = normalize_target(url)
+    url = url.strip()
+    path = URL(url if "://" in url else "http://" + url).raw_path or "/"
+    if not path.startswith("/"):
+        path = "/" + path
+    return origin, path, origin if path == "/" else origin + path
 
 
 def inject_bridge(html):
@@ -87,7 +101,7 @@ async def proxy_http(request, target):
             return web.Response(status=up.status, headers=resp_headers, body=data)
     except (aiohttp.ClientError, asyncio.TimeoutError) as e:
         log.warning("upstream %s failed: %s", url, e)
-        return web.Response(status=502, text=f"winSync: cannot reach Kiwi at {target}: {e}")
+        return web.Response(status=502, text=f"winSync: cannot reach the receiver at {target}: {e}")
 
 
 async def proxy_ws(request, target):
@@ -100,7 +114,7 @@ async def proxy_ws(request, target):
                                       timeout=aiohttp.ClientWSTimeout(ws_close=10))
     except (aiohttp.ClientError, asyncio.TimeoutError) as e:
         log.warning("upstream ws %s failed: %s", url, e)
-        return web.Response(status=502, text=f"winSync: cannot reach Kiwi websocket: {e}")
+        return web.Response(status=502, text=f"winSync: cannot reach the receiver's websocket: {e}")
 
     down = web.WebSocketResponse(max_msg_size=0)
     await down.prepare(request)

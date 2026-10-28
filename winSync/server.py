@@ -13,12 +13,16 @@ from yarl import URL
 from .bands import band_for
 from .cat import CONTROL_MODES, FOLLOW_MODES, CatClient
 from .omnirig import READ_ONLY, OmniRigSource
+from . import sdrconsole
 from .modes import THETIS_LABELS, kiwi_to_thetis, thetis_to_kiwi
-from .proxy import SESSION, normalize_target, proxy_http, proxy_ws
+from .proxy import SESSION, page_target, proxy_http, proxy_ws
 
 log = logging.getLogger("winSync")
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 MAX_URLS = 30
+SOURCES = ("thetis", "omnirig", "sdrconsole")
+# Sources winSync only reads from: Control stays "radio", with this reason
+READ_ONLY_SOURCES = {"omnirig": READ_ONLY, "sdrconsole": sdrconsole.READ_ONLY}
 
 
 def urls_path(cfg):
@@ -70,14 +74,18 @@ class State:
         self.vfo = 0           # VFO being followed: 0 = A / RX1, 1 = B / RX2
         self.rx2_on = False
         self.follow = cfg["sync"]["follow"] if cfg["sync"]["follow"] in FOLLOW_MODES else "auto"
-        self.source = "omnirig" if cfg["cat"].get("source") == "omnirig" else "thetis"
+        source = cfg["cat"].get("source")
+        self.source = source if source in SOURCES else "thetis"
         self.control = cfg["sync"]["control"] if cfg["sync"]["control"] in CONTROL_MODES else "radio"
-        if self.source == "omnirig" and self.control != "radio":
-            log.warning("control = %r ignored: %s", self.control, READ_ONLY)
+        if self.source in READ_ONLY_SOURCES and self.control != "radio":
+            log.warning("control = %r ignored: %s", self.control, READ_ONLY_SOURCES[self.source])
             self.control = "radio"
-        self.control_note = None   # lasting reason the Kiwi can't change the radio
+        self.control_note = None   # lasting reason the receiver can't change the radio
         self.cat = None
-        self.target = normalize_target(cfg["kiwi"]["url"]) if cfg["kiwi"]["url"] else None
+        # SDR Console (QO-100) has a receiver of its own; the others use [kiwi] url
+        url = (self.source == "sdrconsole" and cfg["sdrconsole"].get("url")) or cfg["kiwi"]["url"]
+        # target: origin the proxy serves at the root; page / path: where the receiver page is
+        self.target, self.path, self.page = page_target(url) if url else (None, "/", None)
         self.urls_file = urls_path(cfg)
         self.urls = load_urls(self.urls_file)
 
@@ -88,6 +96,7 @@ DEFAULTS = {
     "server": {"host": "127.0.0.1", "port": 8090, "urls_file": ""},
     "cat": {"source": "thetis", "host": "127.0.0.1", "port": 13013},
     "omnirig": {"rig": 1},
+    "sdrconsole": {"port": "COM23", "baud": 57600, "url": "https://eshail.batc.org.uk/nb/"},
     "kiwi": {"url": ""},
     "sync": {"enabled": True, "zoom_on_band_change": True, "mute_on_tx": False, "follow": "auto",
              "control": "radio", "dry_run": False, "diag": False},
@@ -124,6 +133,7 @@ def snapshot(st):
         "follow": st.follow,
         "control": st.control,
         "source": st.source,
+        "radio_name": getattr(st.cat, "radio_name", None),   # SDR Console's NA; answer
         "control_note": st.control_note,
         "freq_hz": freq,
         "cat_mode": mode,
@@ -159,8 +169,11 @@ def build_app(cfg):
 
     def on_state(freq, mode, tx, vfo, rx2_on):
         st.freq_hz, st.cat_mode, st.tx, st.vfo, st.rx2_on = freq, mode, tx, vfo, rx2_on
-        log.info("radio: RX%d (VFO %s) %s Hz %s %s%s", vfo + 1, "B" if vfo else "A", freq,
-                 THETIS_LABELS.get(mode, mode), "TX" if tx else "RX", "" if rx2_on else ", RX2 off")
+        if st.source == "sdrconsole":            # one receiver, no VFOs
+            log.info("radio: %s Hz %s %s", freq, THETIS_LABELS.get(mode, mode), "TX" if tx else "RX")
+        else:
+            log.info("radio: RX%d (VFO %s) %s Hz %s %s%s", vfo + 1, "B" if vfo else "A", freq,
+                     THETIS_LABELS.get(mode, mode), "TX" if tx else "RX", "" if rx2_on else ", RX2 off")
         asyncio.create_task(broadcast(st))
 
     def on_status(connected):
@@ -170,7 +183,7 @@ def build_app(cfg):
     def on_note(note):
         st.control_note = note
         if note and st.source == "thetis":     # OmniRig logs its own notes
-            log.warning("Kiwi -> radio: %s", note)
+            log.warning("receiver -> radio: %s", note)
         asyncio.create_task(broadcast(st))
 
     async def startup(app):
@@ -180,6 +193,11 @@ def build_app(cfg):
             log.info("CAT source: OmniRig, Rig %s (read-only)", cfg["omnirig"]["rig"])
             st.cat = cat = OmniRigSource(cfg["omnirig"]["rig"], on_state, on_status,
                                          follow=st.follow, on_note=on_note)
+        elif st.source == "sdrconsole":
+            sc = cfg["sdrconsole"]
+            log.info("CAT source: SDR Console on %s, %s baud (read-only)", sc["port"], sc["baud"])
+            st.cat = cat = sdrconsole.SdrConsoleSource(sc["port"], int(sc["baud"]), on_state,
+                                                       on_status, on_note=on_note)
         else:
             st.cat = cat = CatClient(cfg["cat"]["host"], cfg["cat"]["port"], on_state, on_status,
                                      follow=st.follow, control=st.control, on_note=on_note)
@@ -208,8 +226,8 @@ def build_app(cfg):
         return ws
 
     async def get_config(request):
-        return web.json_response({"target": st.target, "sync": cfg["sync"], "cat": cfg["cat"],
-                                  "source": st.source})
+        return web.json_response({"target": st.target, "page": st.page, "path": st.path,
+                                  "sync": cfg["sync"], "cat": cfg["cat"], "source": st.source})
 
     async def set_follow(request):
         if not same_origin(request):
@@ -236,10 +254,10 @@ def build_app(cfg):
                 raise ValueError(f"control must be one of {', '.join(CONTROL_MODES)}")
         except (ValueError, KeyError, TypeError) as e:
             return web.json_response({"error": str(e)}, status=400)
-        if st.source == "omnirig" and control != "radio":
-            return web.json_response({"error": READ_ONLY}, status=400)
+        if st.source in READ_ONLY_SOURCES and control != "radio":
+            return web.json_response({"error": READ_ONLY_SOURCES[st.source]}, status=400)
         st.control = control
-        log.info("control: %s", {"radio": "radio controls Kiwi", "kiwi": "Kiwi controls radio",
+        log.info("control: %s", {"radio": "radio controls receiver", "kiwi": "receiver controls radio",
                                  "both": "both ways"}[control])
         if st.cat:
             st.cat.set_control(control)
@@ -264,14 +282,14 @@ def build_app(cfg):
         if cfg["sync"]["dry_run"]:
             # Testing aid: decide exactly as for real, but never send anything to the radio.
             reason = st.cat._refusal(st.cat.vfo, freq, mode) if st.cat else "the radio is not connected"
-            log.info("DRY RUN: Kiwi -> radio %s Hz mode %s: %s", freq, mode,
+            log.info("DRY RUN: receiver -> radio %s Hz mode %s: %s", freq, mode,
                      reason or "would have moved the radio")
             return web.json_response({"moved": False, "out_of_band": bool(reason) and
                                       "UK amateur bands" in reason,
                                       "message": f"Dry run, radio not moved: {reason or 'would have moved it'}"})
         reason = st.cat.request_tune(freq, mode) if st.cat else "the radio is not connected"
         if reason:
-            log.info("Kiwi -> radio: not moved to %s Hz: %s", freq, reason)
+            log.info("receiver -> radio: not moved to %s Hz: %s", freq, reason)
             return web.json_response({"moved": False, "out_of_band": "UK amateur bands" in reason,
                                       "message": f"Radio not moved: {reason}"})
         result_mode = mode if mode is not None else st.cat_mode
@@ -295,11 +313,11 @@ def build_app(cfg):
         if not same_origin(request):
             raise web.HTTPForbidden()
         try:
-            st.target = normalize_target((await request.json())["url"])
-        except (ValueError, KeyError, json.JSONDecodeError) as e:
+            st.target, st.path, st.page = page_target((await request.json())["url"])
+        except (ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError) as e:
             return web.json_response({"error": str(e)}, status=400)
-        log.info("Kiwi target set to %s", st.target)
-        return web.json_response({"target": st.target})
+        log.info("receiver set to %s", st.page)
+        return web.json_response({"target": st.target, "page": st.page, "path": st.path})
 
     async def get_urls(request):
         return web.json_response({"urls": st.urls})
@@ -321,7 +339,7 @@ def build_app(cfg):
     async def catch_all(request):
         target = st.target
         if not target:
-            return web.Response(status=503, text="winSync: no Kiwi URL set yet.")
+            return web.Response(status=503, text="winSync: no receiver URL set yet.")
         if request.path == "/" and request.headers.get("Sec-Fetch-Dest") == "document":
             raise web.HTTPFound("/_winsync/")  # top-level visits go to the control page
         if request.headers.get("Upgrade", "").lower() == "websocket":

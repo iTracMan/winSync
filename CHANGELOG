@@ -30,7 +30,14 @@ Changed
     (Goonhilly hard-codes wss:// for audio and waterfall); winSync connects upstream with wss. Other
     hosts, ws:// sockets and https pages are untouched.
   * Control forced to "radio" and /api/control refused now apply to every read-only source (OmniRig as
-    before, same message).
+    before).
+  * Wording: "receiver" instead of "Kiwi" wherever it means the receiver winSync is driving, in the
+    window, the page, log messages and notes. Control is now "Radio controls receiver", "Receiver
+    controls radio" or "Both"; OmniRig's notes say "the receiver can't change the radio" and "...so the
+    receiver is not tuned". "Kiwi" stays where it means a KiwiSDR. config.toml values are unchanged
+    (control = "radio" / "kiwi" / "both"), so existing configs work as before. Thetis's own refusal
+    messages and log lines come from cat.py, which is unchanged, so they still say "Kiwi" (e.g.
+    "Control is set to Radio controls Kiwi", "Kiwi -> radio: VFO A ...").
   * winSync.cmd also checks for pyserial, so a v1.2 install runs the setup once by itself and gets it.
 Verified, with the fake SDR Console only (no radio), 2026-10-28
   * The real Goonhilly page through winSync in headless Edge: /nb/ loads with the bridge, is detected as

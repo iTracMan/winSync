@@ -80,7 +80,7 @@ class State:
         if self.source in READ_ONLY_SOURCES and self.control != "radio":
             log.warning("control = %r ignored: %s", self.control, READ_ONLY_SOURCES[self.source])
             self.control = "radio"
-        self.control_note = None   # lasting reason the Kiwi can't change the radio
+        self.control_note = None   # lasting reason the receiver can't change the radio
         self.cat = None
         # SDR Console (QO-100) has a receiver of its own; the others use [kiwi] url
         url = (self.source == "sdrconsole" and cfg["sdrconsole"].get("url")) or cfg["kiwi"]["url"]
@@ -183,7 +183,7 @@ def build_app(cfg):
     def on_note(note):
         st.control_note = note
         if note and st.source == "thetis":     # OmniRig logs its own notes
-            log.warning("Kiwi -> radio: %s", note)
+            log.warning("receiver -> radio: %s", note)
         asyncio.create_task(broadcast(st))
 
     async def startup(app):
@@ -257,7 +257,7 @@ def build_app(cfg):
         if st.source in READ_ONLY_SOURCES and control != "radio":
             return web.json_response({"error": READ_ONLY_SOURCES[st.source]}, status=400)
         st.control = control
-        log.info("control: %s", {"radio": "radio controls Kiwi", "kiwi": "Kiwi controls radio",
+        log.info("control: %s", {"radio": "radio controls receiver", "kiwi": "receiver controls radio",
                                  "both": "both ways"}[control])
         if st.cat:
             st.cat.set_control(control)
@@ -282,14 +282,14 @@ def build_app(cfg):
         if cfg["sync"]["dry_run"]:
             # Testing aid: decide exactly as for real, but never send anything to the radio.
             reason = st.cat._refusal(st.cat.vfo, freq, mode) if st.cat else "the radio is not connected"
-            log.info("DRY RUN: Kiwi -> radio %s Hz mode %s: %s", freq, mode,
+            log.info("DRY RUN: receiver -> radio %s Hz mode %s: %s", freq, mode,
                      reason or "would have moved the radio")
             return web.json_response({"moved": False, "out_of_band": bool(reason) and
                                       "UK amateur bands" in reason,
                                       "message": f"Dry run, radio not moved: {reason or 'would have moved it'}"})
         reason = st.cat.request_tune(freq, mode) if st.cat else "the radio is not connected"
         if reason:
-            log.info("Kiwi -> radio: not moved to %s Hz: %s", freq, reason)
+            log.info("receiver -> radio: not moved to %s Hz: %s", freq, reason)
             return web.json_response({"moved": False, "out_of_band": "UK amateur bands" in reason,
                                       "message": f"Radio not moved: {reason}"})
         result_mode = mode if mode is not None else st.cat_mode
@@ -316,7 +316,7 @@ def build_app(cfg):
             st.target, st.path, st.page = page_target((await request.json())["url"])
         except (ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError) as e:
             return web.json_response({"error": str(e)}, status=400)
-        log.info("Kiwi target set to %s", st.page)
+        log.info("receiver set to %s", st.page)
         return web.json_response({"target": st.target, "page": st.page, "path": st.path})
 
     async def get_urls(request):
@@ -339,7 +339,7 @@ def build_app(cfg):
     async def catch_all(request):
         target = st.target
         if not target:
-            return web.Response(status=503, text="winSync: no Kiwi URL set yet.")
+            return web.Response(status=503, text="winSync: no receiver URL set yet.")
         if request.path == "/" and request.headers.get("Sec-Fetch-Dest") == "document":
             raise web.HTTPFound("/_winsync/")  # top-level visits go to the control page
         if request.headers.get("Upgrade", "").lower() == "websocket":

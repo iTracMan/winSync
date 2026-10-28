@@ -29,13 +29,13 @@ _HEAD_RE = re.compile(r"<head[^>]*>", re.I)
 
 
 def normalize_target(url):
-    """Reduce a user-entered Kiwi URL to scheme://host[:port]. Raises ValueError if unusable."""
+    """Reduce a user-entered receiver URL to scheme://host[:port]. Raises ValueError if unusable."""
     url = url.strip()
     if "://" not in url:
         url = "http://" + url
     u = URL(url)
     if u.scheme not in ("http", "https") or not u.host:
-        raise ValueError("Kiwi URL must be http(s)://host[:port]")
+        raise ValueError("receiver URL must be http(s)://host[:port]")
     return str(u.origin())
 
 
@@ -101,7 +101,7 @@ async def proxy_http(request, target):
             return web.Response(status=up.status, headers=resp_headers, body=data)
     except (aiohttp.ClientError, asyncio.TimeoutError) as e:
         log.warning("upstream %s failed: %s", url, e)
-        return web.Response(status=502, text=f"winSync: cannot reach Kiwi at {target}: {e}")
+        return web.Response(status=502, text=f"winSync: cannot reach the receiver at {target}: {e}")
 
 
 async def proxy_ws(request, target):
@@ -114,7 +114,7 @@ async def proxy_ws(request, target):
                                       timeout=aiohttp.ClientWSTimeout(ws_close=10))
     except (aiohttp.ClientError, asyncio.TimeoutError) as e:
         log.warning("upstream ws %s failed: %s", url, e)
-        return web.Response(status=502, text=f"winSync: cannot reach Kiwi websocket: {e}")
+        return web.Response(status=502, text=f"winSync: cannot reach the receiver's websocket: {e}")
 
     down = web.WebSocketResponse(max_msg_size=0)
     await down.prepare(request)

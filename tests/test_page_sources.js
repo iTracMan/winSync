@@ -75,7 +75,7 @@ async function page(state) {
   assert.strictEqual(e["cat-chip"].textContent, "OmniRig: connected");
   assert.strictEqual(e["rxvfo"].textContent, "VFO A");
   assert.strictEqual(e["control"].disabled, true);
-  assert.strictEqual(e["control-note"].textContent, "OmniRig is read-only: tuning the Kiwi doesn't move the radio");
+  assert.strictEqual(e["control-note"].textContent, "OmniRig is read-only: tuning the receiver doesn't move the radio");
   assert.strictEqual(e["control-note"].hidden, false);
 
   // SDR Console: name from NA;, one receiver, read-only note after any problem

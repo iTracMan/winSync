@@ -40,7 +40,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true",
                     help="testing: two-way sync decides as usual but never sends anything to the radio")
     ap.add_argument("--diag", action="store_true",
-                    help="testing: the page logs every Kiwi readback change and tune to this log")
+                    help="testing: the page logs every receiver readback change and tune to this log")
     ap.add_argument("--exit-with-stdin", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()

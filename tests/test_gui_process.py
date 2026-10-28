@@ -290,3 +290,18 @@ def test_launcher_checks_every_requirement():
     for line in (check, setup):
         names = {n.strip() for n in line.split(",")}
         assert {imports[r] for r in reqs} <= names and "tkinter" in names
+
+
+def test_control_labels_say_receiver():
+    """The window and the page name the receiver winSync drives "receiver", not "Kiwi", while the
+    config.toml values stay radio / kiwi / both so existing configs still work."""
+    import re
+    from pathlib import Path
+    from winSync import omnirig
+    from winSync.gui import CONTROL_CHOICES
+    assert CONTROL_CHOICES == {"radio": "Radio controls receiver", "kiwi": "Receiver controls radio",
+                               "both": "Both"}
+    html = (Path(__file__).resolve().parent.parent / "static" / "index.html").read_text(encoding="utf-8")
+    select = re.search(r'<select id="control">(.*?)</select>', html).group(1)
+    assert dict(re.findall(r'<option value="(\w+)">([^<]+)</option>', select)) == CONTROL_CHOICES
+    assert omnirig.READ_ONLY == "winSync only reads from OmniRig, so the receiver can't change the radio"

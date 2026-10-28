@@ -17,13 +17,13 @@ can SDR Console on QO-100, with the Goonhilly WebSDR as the receiver (see "SDR C
 
 * A small Python server connects to Thetis's **TCP/IP CAT server** (default here **127.0.0.1:13013**)
   and polls it about 10 times a second. By default it only ever *reads* from the radio (see "CAT
-  commands" below). Optional two-way sync lets tuning in the Kiwi set the radio's frequency and mode.
-* The same server acts as a reverse proxy for the Kiwi you choose, so the Kiwi page is served from the
-  same origin as the winSync control page. That lets winSync call Kiwi's own tuning function
+  commands" below). Optional two-way sync lets tuning in the receiver set the radio's frequency and mode.
+* The same server acts as a reverse proxy for the receiver you choose, so the receiver's page is served
+  from the same origin as the winSync control page. That lets winSync call a Kiwi's own tuning function
   (`freqmode_set_dsp_kHz`) directly, with no fake keystrokes or clicks.
 * The receiver type is detected from the page: KiwiSDR, or the classic PA3FWM **WebSDR**
   (e.g. `http://hackgreensdr.org:8901/`), where winSync calls WebSDR's own `setfreqb()` / `set_mode()`.
-* The control page (`/_winsync/`) shows the radio state and applies it to the Kiwi in an iframe.
+* The control page (`/_winsync/`) shows the radio state and applies it to the receiver in an iframe.
 
 ## Setup (one double-click)
 
@@ -57,7 +57,7 @@ If Windows SmartScreen asks about `winSync.cmd` the first time, choose *More inf
    Console; with OmniRig or SDR Console the box asks you to confirm that instead.
 2. Press **Start winSync**. Its output scrolls in the field below; **Stop winSync** stops it.
    **Control** (below the Start button, default `[sync] control` in `config.toml`) chooses two-way sync
-   when winSync starts: Radio controls Kiwi, Kiwi controls radio or Both. While winSync runs it is
+   when winSync starts: Radio controls receiver, Receiver controls radio or Both. While winSync runs it is
    locked; change it with the Control selector on the page instead.
 3. Press **Open winSync page** to open <http://127.0.0.1:8090/_winsync/> in your default browser
    (only enabled while winSync is running). **Open websdr map** opens
@@ -78,14 +78,17 @@ such as `https://eshail.batc.org.uk/nb/`, keeps its path.
 ## Behaviour notes
 
 * **Control** (selector on the page; default `[sync] control` in `config.toml`, or `--control`):
-  * **Radio controls Kiwi** (`radio`, the default, as v1.0): tuning inside the Kiwi does not affect
-    Thetis; the next radio change (or **Resync**) puts the Kiwi back on the radio's frequency.
-  * **Kiwi controls radio** (`kiwi`): tuning the Kiwi sets the followed VFO's frequency and mode in
-    Thetis. Radio changes no longer move the Kiwi (Resync still does).
+  * **Radio controls receiver** (`radio`, the default, as v1.0): tuning inside the receiver does not
+    affect Thetis; the next radio change (or **Resync**) puts the receiver back on the radio's frequency.
+  * **Receiver controls radio** (`kiwi`): tuning the receiver sets the followed VFO's frequency and mode
+    in Thetis. Radio changes no longer move the receiver (Resync still does).
+
+  (The `config.toml` values are still `radio`, `kiwi` and `both`; before v1.3 the first two were
+  labelled "Radio controls Kiwi" and "Kiwi controls radio".)
   * **Both** (`both`): whichever was tuned last wins.
 
   The radio is only changed when **all** of these hold, otherwise the page says "Radio not moved: …"
-  and the Kiwi stays where you put it:
+  and the receiver stays where you put it:
   * the radio is receiving: not MOX, CAT PTT or TUNE, and not within 1 s of the end of a
     transmission. A change that arrives during TX is dropped, not saved for later;
   * the frequency is inside the **UK amateur bands**, exactly as Thetis defines them for its UK region
@@ -97,7 +100,7 @@ such as `https://eshail.batc.org.uk/nb/`, keeps its path.
   * only the **followed VFO** is changed (Follow), using `ZZFA`/`ZZMD` for VFO A or `ZZFB`/`ZZME`
     for VFO B, from a reading of Thetis at most 0.5 s old;
   * for VFO A: Thetis's MI0BOT "CAT to VFO B" option is seen to be off. With it on, `ZZFA`/`ZZMD`
-    change VFO B, so VFO A is never set from the Kiwi and the page says why. winSync can only tell
+    change VFO B, so VFO A is never set from the receiver and the page says why. winSync can only tell
     while VFO A and VFO B are on different frequencies. If a change ever shows up on the other VFO,
     winSync stops changing the radio until you choose Control again.
 
@@ -107,14 +110,14 @@ such as `https://eshail.batc.org.uk/nb/`, keeps its path.
   (`iq`, `drm`) change only the frequency. A drag across the waterfall sends only where it stops
   (it must hold still for 0.25 s), and at most about five changes a second are sent.
 * **Follows the VFO in use.** Thetis ties RX1 to VFO A and RX2 to VFO B, but does not report which
-  receiver you are using (its `FR;` always answers 0). So with **Follow: Auto (last tuned)** the Kiwi
+  receiver you are using (its `FR;` always answers 0). So with **Follow: Auto (last tuned)** the receiver
   follows VFO A while RX2 is off, and with RX2 on whichever VFO you tuned (frequency or mode) last.
   When both move at once (VFO sync, A>B copy) it stays on the current one. **Follow: VFO A** or
   **VFO B** fixes it. The default is `[sync] follow` in `config.toml`. The page shows
   "RX1 · VFO A" or "RX2 · VFO B" for the VFO being followed.
 * **Mute on TX** (checkbox, remembered by the browser; default `mute_on_tx` in `config.toml`): the
   receiver's audio is muted while Thetis transmits (MOX, CAT PTT or TUNE) and restored on return to
-  receive. If you had muted the Kiwi yourself, winSync leaves it muted. TX state is polled, so the mute
+  receive. If you had muted the receiver yourself, winSync leaves it muted. TX state is polled, so the mute
   follows the start of a transmission within about 0.1–0.15 s. If the CAT link drops during TX, winSync
   treats the radio as receiving and unmutes.
   Tested live with Thetis v2.10.3.15 (MI0BOT HL2) on 2026-10-19: CW in CWU sent from Thetis's CWX form
@@ -126,13 +129,13 @@ such as `https://eshail.batc.org.uk/nb/`, keeps its path.
   `[modes]` table in `config.toml` (keys are Thetis mode numbers, listed there). On a WebSDR the modes are
   reduced to its five: LSB, USB, CW, AM and FM.
 * Frequencies outside the receiver's coverage are reported and skipped (a WebSDR only covers its own bands).
-* Bind to `127.0.0.1` (default) unless you need LAN access; the server proxies to whatever Kiwi you
+* Bind to `127.0.0.1` (default) unless you need LAN access; the server proxies to whatever receiver you
   enter, so don't expose it to untrusted networks.
 * Please respect each Kiwi operator's time limits and rules.
 
 ## CAT commands
 
-With Control on **Radio controls Kiwi** (the default) winSync sends exactly five commands, all reads,
+With Control on **Radio controls receiver** (the default) winSync sends exactly five commands, all reads,
 as one batch per poll: `ZZIF;ZZFB;ZZME;ZZRS;ZZXV;`. `winSync/cat.py` refuses to send anything else,
 and a test checks this. With two-way sync on, the batch also reads `ZZFA;` (a pure read that returns
 VFO A, or VFO B when "CAT to VFO B" is on), and the only other commands that can ever be written are:
@@ -196,12 +199,12 @@ baud rate). winSync starts OmniRig through COM when it needs it, using `pywin32`
 * **Read-only, always.** winSync only reads OmniRig's `Status`, `StatusStr`, `RigType`,
   `ReadableParams`, `Freq`, `FreqA`, `FreqB`, `Vfo`, `Mode` and `Tx`. It never sets a property or calls
   a method (`winSync/omnirig.py`, `ReadOnlyRig`; the tests check that against a fake OmniRig that records
-  everything). So two-way sync is off with OmniRig: Control is fixed to *Radio controls Kiwi*, and the
+  everything). So two-way sync is off with OmniRig: Control is fixed to *Radio controls receiver*, and the
   page's Control selector is greyed out.
 * OmniRig itself sends its rig file's commands to the radio (to poll it, plus any `[INIT]` commands in
   that rig's `.ini` file). That is OmniRig's traffic, not winSync's.
 * Modes: LSB, USB, CW-L, CW-U, FM, AM, DIG-U and DIG-L map to Kiwi modes as for Thetis. If the radio
-  reports another mode, the Kiwi is not tuned and the page says why.
+  reports another mode, the receiver is not tuned and the page says why.
 * VFO: Follow Auto follows the VFO OmniRig reports as receiving; Follow A or B uses `FreqA` / `FreqB`.
 * TX: if the rig's OmniRig file doesn't report TX, the page says so, and Mute on TX can't work.
 * If OmniRig isn't installed, the radio isn't responding or OmniRig closes, the page says so and winSync
@@ -267,7 +270,7 @@ url = "https://eshail.batc.org.uk/nb/"   # the receiver used with SDR Console
   anything else, and a test tries every other two-letter command, bare and with parameters. This
   matters: **in SDR Console `TX;` switches to transmit and `RX;` to receive**; they are not status
   reads, and `FA…;` / `MD…;` with a value change the radio. So two-way sync is off with SDR Console:
-  Control is fixed to *Radio controls Kiwi*, the page's Control and Follow selectors are greyed out, and
+  Control is fixed to *Radio controls receiver*, the page's Control and Follow selectors are greyed out, and
   the page always says "SDR Console is read-only: tuning the receiver doesn't move the radio".
 * SDR Console has auto-information always off, so winSync polls. One `IF;` reply carries all three
   values: e.g. `IF104897300000000+0000000000020000000;` is 10,489,730,000 Hz (characters 2–12, counting
@@ -326,7 +329,7 @@ a spare com0com pair instead of a port number. Type `f 10489600000`, `m 1` (mode
 `--control radio|kiwi|both` overrides `[sync] control`; `--source thetis|omnirig|sdrconsole` and `--rig 1|2`
 override `[cat] source` and `[omnirig] rig`. For testing two-way sync, `--dry-run` makes it
 decide as usual but never send anything to the radio (the log says what it would have done), and
-`--diag` makes the page log every Kiwi readback change, every time winSync tunes the Kiwi and every
+`--diag` makes the page log every receiver readback change, every time winSync tunes the receiver and every
 change it treats as yours.
 
 ## Tests

@@ -124,7 +124,7 @@ async function setControl(v) {
     // 3. Out of the UK bands: radio not moved, Kiwi stays, page says why
     await userTunesKiwi(14400000, "usb");
     await until(() => msg().includes("outside the UK amateur bands"), "out of band msg");
-    assert.strictEqual(msg(), "Radio not moved: 14.400000 MHz is outside the UK amateur bands (Kiwi only)");
+    assert.strictEqual(msg(), "Radio not moved: 14.400000 MHz is outside the UK amateur bands (receiver only)");
     await sleep(1000);
     assert.strictEqual(radioSets(), 1);
     assert.deepStrictEqual(kiwi.cur, { freq_hz: 14400000, mode: "usb" });

@@ -18,7 +18,7 @@ let zoomOnBand = true;
 let lastApplied = null;                    // {freq_hz, kiwi_mode, band} last pushed to Kiwi
 let force = false;                         // set to re-push even if unchanged (Resync / Kiwi reload)
 let serverDown = false;                    // the page has lost the winSync server
-const OMNIRIG_READ_ONLY = "OmniRig is read-only: tuning the Kiwi doesn't move the radio";
+const OMNIRIG_READ_ONLY = "OmniRig is read-only: tuning the receiver doesn't move the radio";
 const SOURCE_LABELS = { thetis: "Thetis", omnirig: "OmniRig", sdrconsole: "SDR Console" };
 // Read-only sources: no Kiwi -> radio, and the page always says so
 const READ_ONLY_NOTES = {
@@ -41,7 +41,7 @@ function diagReadback(b) {
   if (!diagOn || !b || !b.ready()) return;
   const rb = b.readback();
   const s = rb ? rb.freq_hz + " " + rb.mode : "none";
-  if (s !== diagLastRb) { diag("Kiwi readback " + s); diagLastRb = s; }
+  if (s !== diagLastRb) { diag("receiver readback " + s); diagLastRb = s; }
 }
 function diagFlush() {
   if (!diagEvents.length) return;
@@ -94,7 +94,7 @@ function render() {
   const ctl = $("control");
   if (radio.control && document.activeElement !== ctl) ctl.value = radio.control;
   ctl.disabled = readOnly;
-  ctl.title = readOnly ? label + " is read-only in winSync: the radio controls the Kiwi" : "";
+  ctl.title = readOnly ? label + " is read-only in winSync: the radio controls the receiver" : "";
   // Read-only sources: always say so, after any problem (not installed, not answering...)
   const note = readOnly ? [radio.control_note, READ_ONLY_NOTES[radio.source]].filter(Boolean).join(" · ")
                         : radio.control_note || "";
@@ -132,7 +132,7 @@ function apply() {
   if (same && !force) return;
   const bandChanged = !lastApplied || lastApplied.band !== radio.band;
   watch.quiet(Date.now(), SETTLE_MS);      // this tune is ours, not the user's
-  diag("winSync tunes Kiwi " + radio.freq_hz + " " + radio.kiwi_mode + (force ? " (forced)" : ""));
+  diag("winSync tunes receiver " + radio.freq_hz + " " + radio.kiwi_mode + (force ? " (forced)" : ""));
   const res = b.tune(radio.freq_hz, radio.kiwi_mode,
                      { zoomToBand: zoomOnBand && bandChanged && radio.band !== "GEN" });
   force = false;
@@ -173,7 +173,7 @@ async function sendTune(change) {
       radioHoldUntil = Date.now() + RADIO_HOLD_MS;
       setMsg("Radio set to " + fmtFreq(j.freq_hz) + (j.kiwi_mode ? " " + j.kiwi_mode : ""));
     } else {
-      setMsg(j.message + (j.out_of_band ? " (Kiwi only)" : ""), true);
+      setMsg(j.message + (j.out_of_band ? " (receiver only)" : ""), true);
     }
   } catch (e) {
     setMsg("Could not reach the winSync server to tune the radio", true);
@@ -320,7 +320,7 @@ async function connectKiwi(url) {
     body: JSON.stringify({ url }),
   });
   const j = await r.json();
-  if (!r.ok) { setMsg(j.error || "Bad Kiwi URL", true); return; }
+  if (!r.ok) { setMsg(j.error || "Bad receiver URL", true); return; }
   const page = j.page || j.target;          // with its path, e.g. https://eshail.batc.org.uk/nb/
   try { localStorage.setItem("winSync.kiwi", page); } catch (e) { /* storage may be blocked */ }
   rememberUrl(page);
@@ -363,7 +363,7 @@ $("control").addEventListener("change", async (e) => {
 });
 $("resync").addEventListener("click", () => { force = true; apply(); });
 frame.addEventListener("load", () => {
-  diag("Kiwi page loaded");
+  diag("receiver page loaded");
   lastApplied = null; force = true;
   watch.quiet(Date.now(), LOAD_SETTLE_MS);
 });

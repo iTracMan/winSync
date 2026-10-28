@@ -25,10 +25,10 @@ url = "http://m0cke.proxy.kiwisdr.com:8073/"   # can also be changed from the pa
 
 [sync]
 enabled = true
-zoom_on_band_change = true       # re-zoom the Kiwi waterfall to the band when the band changes
-mute_on_tx = false               # default for the "Mute on TX" checkbox (mutes Kiwi audio while transmitting)
+zoom_on_band_change = true       # re-zoom the receiver's waterfall to the band when the band changes
+mute_on_tx = false               # default for the "Mute on TX" checkbox (mutes the receiver while transmitting)
 follow = "auto"                  # "auto" = VFO A, or with RX2 on the VFO tuned last; "A" or "B" = always that VFO
-control = "radio"                # "radio" = radio tunes the Kiwi (one way, as v1.0); "kiwi" = tuning the Kiwi
+control = "radio"                # "radio" = radio tunes the receiver (one way, as v1.0); "kiwi" = tuning the receiver
                                  # sets the radio's followed VFO; "both" = whichever was tuned last.
                                  # The radio is only changed in receive, inside the UK amateur bands.
 

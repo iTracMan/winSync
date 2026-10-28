@@ -18,18 +18,18 @@
     <button type="submit">Connect</button>
   </form>
   <label class="toggle"><input id="sync-on" type="checkbox" checked> Sync</label>
-  <label class="toggle" title="Mute the Kiwi audio while Thetis is transmitting (MOX, PTT or TUNE), to avoid audio feedback"><input id="mute-tx" type="checkbox"> Mute on TX</label>
-  <label class="toggle" title="Which VFO the Kiwi follows. Auto: VFO A, or with RX2 on whichever VFO you tuned last">Follow
+  <label class="toggle" title="Mute the receiver's audio while the radio is transmitting (with Thetis: MOX, PTT or TUNE), to avoid audio feedback"><input id="mute-tx" type="checkbox"> Mute on TX</label>
+  <label class="toggle" title="Which VFO the receiver follows. Auto: VFO A, or with RX2 on whichever VFO you tuned last">Follow
     <select id="follow"><option value="auto">Auto (last tuned)</option><option value="A">VFO A</option><option value="B">VFO B</option></select></label>
   <label class="toggle" title="Which side tunes the other. The radio is only changed while receiving, and only inside the UK amateur bands">Control
-    <select id="control"><option value="radio">Radio controls Kiwi</option><option value="kiwi">Kiwi controls radio</option><option value="both">Both</option></select></label>
-  <button id="resync" type="button" title="Push the radio's frequency and mode to the Kiwi now">Resync</button>
+    <select id="control"><option value="radio">Radio controls receiver</option><option value="kiwi">Receiver controls radio</option><option value="both">Both</option></select></label>
+  <button id="resync" type="button" title="Push the radio's frequency and mode to the receiver now">Resync</button>
   <div class="chips">
     <span class="chip" id="cat-chip">Thetis: …</span>
     <span class="chip" id="kiwi-chip">Receiver: …</span>
   </div>
   <div class="readout">
-    <span id="rxvfo" title="Receiver and VFO the Kiwi is following">RX1 · VFO A</span>
+    <span id="rxvfo" title="Receiver and VFO winSync is following">RX1 · VFO A</span>
     <span id="freq">—</span>
     <span id="mode">—</span>
     <span id="band">—</span>
@@ -38,7 +38,7 @@
   <div id="control-note" hidden></div>
   <div id="msg" role="status"></div>
 </header>
-<iframe id="kiwi" title="KiwiSDR" allow="autoplay; fullscreen"></iframe>
+<iframe id="kiwi" title="Receiver" allow="autoplay; fullscreen"></iframe>
 <script src="/_winsync/static/kiwiwatch.js?v=7"></script>
 <script src="/_winsync/static/app.js?v=7"></script>
 </body>

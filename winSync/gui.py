@@ -19,11 +19,11 @@ DEFAULT_CAT_PORT = 13013
 DEFAULT_WEB_PORT = 8090
 WEBSDR_MAP_URL = "https://rx-tx.info/map-sdr-points#close"
 # Two-way sync: [sync] control / --control value -> label in the window (and on the page)
-CONTROL_CHOICES = {"radio": "Radio controls Kiwi", "kiwi": "Kiwi controls radio", "both": "Both"}
+CONTROL_CHOICES = {"radio": "Radio controls receiver", "kiwi": "Receiver controls radio", "both": "Both"}
 # Where the radio's state comes from: ([cat] source, [omnirig] rig) -> label in the window
 SOURCE_CHOICES = {("thetis", None): "Thetis", ("omnirig", 1): "OmniRig Rig 1",
                   ("omnirig", 2): "OmniRig Rig 2", ("sdrconsole", None): "SDR Console"}
-READ_ONLY_SOURCES = ("omnirig", "sdrconsole")      # Control is fixed to Radio controls Kiwi
+READ_ONLY_SOURCES = ("omnirig", "sdrconsole")      # Control is fixed to Radio controls receiver
 MAX_LOG_LINES = 5000
 POLL_MS = 100
 # "Address already in use" as aiohttp reports it on Windows (WSAEADDRINUSE) and elsewhere
@@ -406,7 +406,7 @@ class App:
 
     def _source_changed(self, first=False):
         """The checkbox says what to confirm for this source. OmniRig and SDR Console are
-        read-only, so Control is fixed to Radio controls Kiwi."""
+        read-only, so Control is fixed to Radio controls receiver."""
         source, rig = self._source_key()
         if source == "omnirig":
             self.check.configure(text=f"OmniRig is installed and its Rig {rig} is set up for your "

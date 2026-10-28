@@ -253,3 +253,22 @@ def test_read_source(tmp_path):
     for text, expected in cases.items():
         (tmp_path / "config.toml").write_text(text)
         assert read_source(tmp_path) == expected and expected in SOURCE_CHOICES
+
+
+def test_sdrconsole_source(tmp_path, monkeypatch):
+    import winSync.gui as gui
+    assert gui.SOURCE_CHOICES[("sdrconsole", None)] == "SDR Console"
+    assert list(gui.SOURCE_CHOICES)[0] == ("thetis", None)          # Thetis is still the first choice
+    (tmp_path / "config.toml").write_text('[cat]\nsource = "sdrconsole"\n')
+    assert gui.read_source(tmp_path) == ("sdrconsole", None)
+    assert gui.read_sdrconsole_port(tmp_path) == "COM23"
+    (tmp_path / "config.toml").write_text('[cat]\nsource = "sdrconsole"\n[sdrconsole]\nport = "COM9"\n')
+    assert gui.read_sdrconsole_port(tmp_path) == "COM9"
+    seen = []
+    monkeypatch.setattr(gui.subprocess, "Popen",
+                        lambda argv, **kw: seen.append(argv) or (_ for _ in ()).throw(OSError("stop")))
+    sp = ServerProcess(root=tmp_path)
+    monkeypatch.setattr(sp, "venv_python", lambda: tmp_path / "python.exe")
+    with pytest.raises(OSError):
+        sp.start(control="radio", source="sdrconsole", rig=None)
+    assert seen[0][-4:] == ["--control", "radio", "--source", "sdrconsole"]

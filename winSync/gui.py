@@ -22,7 +22,8 @@ WEBSDR_MAP_URL = "https://rx-tx.info/map-sdr-points#close"
 CONTROL_CHOICES = {"radio": "Radio controls Kiwi", "kiwi": "Kiwi controls radio", "both": "Both"}
 # Where the radio's state comes from: ([cat] source, [omnirig] rig) -> label in the window
 SOURCE_CHOICES = {("thetis", None): "Thetis", ("omnirig", 1): "OmniRig Rig 1",
-                  ("omnirig", 2): "OmniRig Rig 2"}
+                  ("omnirig", 2): "OmniRig Rig 2", ("sdrconsole", None): "SDR Console"}
+READ_ONLY_SOURCES = ("omnirig", "sdrconsole")      # Control is fixed to Radio controls Kiwi
 MAX_LOG_LINES = 5000
 POLL_MS = 100
 # "Address already in use" as aiohttp reports it on Windows (WSAEADDRINUSE) and elsewhere
@@ -149,7 +150,14 @@ def read_source(root=ROOT):
     if cfg.get("cat", {}).get("source") == "omnirig":
         rig = cfg.get("omnirig", {}).get("rig", 1)
         return ("omnirig", rig if rig in (1, 2) else 1)
+    if cfg.get("cat", {}).get("source") == "sdrconsole":
+        return ("sdrconsole", None)
     return ("thetis", None)
+
+
+def read_sdrconsole_port(root=ROOT):
+    """[sdrconsole] port from config.toml (winSync's end of the com0com pair)."""
+    return str(read_config(root).get("sdrconsole", {}).get("port", "COM23"))
 
 
 def read_cat_port(root=ROOT):
@@ -302,7 +310,8 @@ class App:
         if self.version:
             tk.Label(title_row, text=self.version, bg=PANEL, fg=MUTED,
                      font=("TkDefaultFont", 10)).pack(side="left", padx=(6, 0), pady=(6, 0))
-        tk.Label(titles, text="Keeps a KiwiSDR or WebSDR tuned to Thetis, or a radio through OmniRig", bg=PANEL, fg=MUTED
+        tk.Label(titles, text="Keeps a KiwiSDR or WebSDR tuned to Thetis, a radio through OmniRig, "
+                 "or SDR Console", bg=PANEL, fg=MUTED
                  ).pack(anchor="w")
 
         # Step 1: the user confirms Thetis (or OmniRig) is running
@@ -372,7 +381,8 @@ class App:
         atexit.register(lambda: self.server.stop(blocking=True))
         self._source_changed(first=True)
         self._append("Tick the box above once Thetis is running with its TCP/IP CAT server on "
-                     "(or OmniRig is set up for your radio), then press Start winSync.", "note")
+                     "(or OmniRig is set up for your radio, or SDR Console has its CAT serial port "
+                     "on), then press Start winSync.", "note")
         win.after(POLL_MS, self._poll)
 
     def _load_icons(self):
@@ -395,12 +405,16 @@ class App:
         return next(k for k, v in SOURCE_CHOICES.items() if v == self.source.get())
 
     def _source_changed(self, first=False):
-        """The checkbox says what to confirm for this source. OmniRig is read-only, so Control is
-        fixed to Radio controls Kiwi."""
+        """The checkbox says what to confirm for this source. OmniRig and SDR Console are
+        read-only, so Control is fixed to Radio controls Kiwi."""
         source, rig = self._source_key()
         if source == "omnirig":
             self.check.configure(text=f"OmniRig is installed and its Rig {rig} is set up for your "
                                       "radio (OmniRig Settings: rig type, COM port, baud rate)")
+            self.control.set(CONTROL_CHOICES["radio"])
+        elif source == "sdrconsole":
+            self.check.configure(text="SDR Console is running with its CAT serial port ticked (Program "
+                                      f"Options > Controllers > CAT); winSync uses {read_sdrconsole_port()}")
             self.control.set(CONTROL_CHOICES["radio"])
         else:
             self.check.configure(text="Thetis is running and its TCP/IP CAT server is enabled "
@@ -421,8 +435,8 @@ class App:
         self.check.configure(state="disabled" if running or self.stopping else "normal")
         locked = running or self.stopping
         self.source_menu.configure(state="disabled" if locked else "normal")
-        omnirig = self._source_key()[0] == "omnirig"
-        self.control_menu.configure(state="disabled" if locked or omnirig else "normal")
+        read_only = self._source_key()[0] in READ_ONLY_SOURCES
+        self.control_menu.configure(state="disabled" if locked or read_only else "normal")
         self.open_button.configure(state="normal" if running and not self.stopping else "disabled")
 
     def _open_page(self):

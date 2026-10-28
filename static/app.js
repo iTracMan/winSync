@@ -19,6 +19,12 @@ let lastApplied = null;                    // {freq_hz, kiwi_mode, band} last pu
 let force = false;                         // set to re-push even if unchanged (Resync / Kiwi reload)
 let serverDown = false;                    // the page has lost the winSync server
 const OMNIRIG_READ_ONLY = "OmniRig is read-only: tuning the Kiwi doesn't move the radio";
+const SOURCE_LABELS = { thetis: "Thetis", omnirig: "OmniRig", sdrconsole: "SDR Console" };
+// Read-only sources: no Kiwi -> radio, and the page always says so
+const READ_ONLY_NOTES = {
+  omnirig: OMNIRIG_READ_ONLY,
+  sdrconsole: "SDR Console is read-only: tuning the receiver doesn't move the radio",
+};
 let control = "radio";                     // "radio", "kiwi" or "both" (from the server)
 let radioHoldUntil = 0;
 let tuneInFlight = false;
@@ -68,27 +74,32 @@ function fmtFreq(hz) {
 
 function render() {
   const omni = radio.source === "omnirig";   // read-only OmniRig source: no RX2, no Kiwi -> radio
+  const sdrc = radio.source === "sdrconsole"; // read-only SDR Console: one receiver, no VFOs
+  const readOnly = radio.source in READ_ONLY_NOTES;
+  const label = SOURCE_LABELS[radio.source] || "Thetis";
   if (serverDown) chip("cat-chip", "winSync server: reconnecting…", "bad");   // radio state is stale
-  else chip("cat-chip", (omni ? "OmniRig" : "Thetis") + (radio.cat_connected ? ": connected" : ": disconnected"),
+  else chip("cat-chip", label + (radio.cat_connected ? ": connected" : ": disconnected") +
+            (radio.cat_connected && radio.radio_name ? " (" + radio.radio_name + ")" : ""),
             radio.cat_connected ? "ok" : "bad");
   $("freq").textContent = fmtFreq(radio.freq_hz);
   $("mode").textContent = radio.mode_label || "—";
   $("band").textContent = radio.band || "—";
   $("txbadge").hidden = !radio.tx;
   const rx2 = radio.rx === 1;
-  $("rxvfo").textContent = omni ? (rx2 ? "VFO B" : "VFO A") : (rx2 ? "RX2 · VFO B" : "RX1 · VFO A");
+  $("rxvfo").textContent = sdrc ? "RX" : omni ? (rx2 ? "VFO B" : "VFO A") : (rx2 ? "RX2 · VFO B" : "RX1 · VFO A");
   $("rxvfo").className = rx2 ? "rx2" : "";
   const sel = $("follow");
   if (radio.follow && document.activeElement !== sel) sel.value = radio.follow;
+  sel.disabled = sdrc;                      // SDR Console reports one receiver
   const ctl = $("control");
   if (radio.control && document.activeElement !== ctl) ctl.value = radio.control;
-  ctl.disabled = omni;
-  ctl.title = omni ? "OmniRig is read-only in winSync: the radio controls the Kiwi" : "";
-  // OmniRig: always say it is read-only, after any OmniRig problem (not installed, not responding...)
-  const note = omni ? [radio.control_note, OMNIRIG_READ_ONLY].filter(Boolean).join(" · ")
-                    : radio.control_note || "";
+  ctl.disabled = readOnly;
+  ctl.title = readOnly ? label + " is read-only in winSync: the radio controls the Kiwi" : "";
+  // Read-only sources: always say so, after any problem (not installed, not answering...)
+  const note = readOnly ? [radio.control_note, READ_ONLY_NOTES[radio.source]].filter(Boolean).join(" · ")
+                        : radio.control_note || "";
   $("control-note").textContent = note;
-  $("control-note").hidden = !note || (radio.control === "radio" && !omni);
+  $("control-note").hidden = !note || (radio.control === "radio" && !readOnly);
   const b = bridge();
   const kind = (b && b.kind && b.kind()) || "Receiver";   // "Kiwi" or "WebSDR", from the bridge
   if (!frame.getAttribute("src")) chip("kiwi-chip", "Receiver: not connected", "");

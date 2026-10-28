@@ -13,12 +13,16 @@ from yarl import URL
 from .bands import band_for
 from .cat import CONTROL_MODES, FOLLOW_MODES, CatClient
 from .omnirig import READ_ONLY, OmniRigSource
+from . import sdrconsole
 from .modes import THETIS_LABELS, kiwi_to_thetis, thetis_to_kiwi
 from .proxy import SESSION, normalize_target, proxy_http, proxy_ws
 
 log = logging.getLogger("winSync")
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 MAX_URLS = 30
+SOURCES = ("thetis", "omnirig", "sdrconsole")
+# Sources winSync only reads from: Control stays "radio", with this reason
+READ_ONLY_SOURCES = {"omnirig": READ_ONLY, "sdrconsole": sdrconsole.READ_ONLY}
 
 
 def urls_path(cfg):
@@ -70,14 +74,17 @@ class State:
         self.vfo = 0           # VFO being followed: 0 = A / RX1, 1 = B / RX2
         self.rx2_on = False
         self.follow = cfg["sync"]["follow"] if cfg["sync"]["follow"] in FOLLOW_MODES else "auto"
-        self.source = "omnirig" if cfg["cat"].get("source") == "omnirig" else "thetis"
+        source = cfg["cat"].get("source")
+        self.source = source if source in SOURCES else "thetis"
         self.control = cfg["sync"]["control"] if cfg["sync"]["control"] in CONTROL_MODES else "radio"
-        if self.source == "omnirig" and self.control != "radio":
-            log.warning("control = %r ignored: %s", self.control, READ_ONLY)
+        if self.source in READ_ONLY_SOURCES and self.control != "radio":
+            log.warning("control = %r ignored: %s", self.control, READ_ONLY_SOURCES[self.source])
             self.control = "radio"
         self.control_note = None   # lasting reason the Kiwi can't change the radio
         self.cat = None
-        self.target = normalize_target(cfg["kiwi"]["url"]) if cfg["kiwi"]["url"] else None
+        # SDR Console (QO-100) has a receiver of its own; the others use [kiwi] url
+        url = (self.source == "sdrconsole" and cfg["sdrconsole"].get("url")) or cfg["kiwi"]["url"]
+        self.target = normalize_target(url) if url else None
         self.urls_file = urls_path(cfg)
         self.urls = load_urls(self.urls_file)
 
@@ -88,6 +95,7 @@ DEFAULTS = {
     "server": {"host": "127.0.0.1", "port": 8090, "urls_file": ""},
     "cat": {"source": "thetis", "host": "127.0.0.1", "port": 13013},
     "omnirig": {"rig": 1},
+    "sdrconsole": {"port": "COM23", "baud": 57600, "url": "https://eshail.batc.org.uk/nb/"},
     "kiwi": {"url": ""},
     "sync": {"enabled": True, "zoom_on_band_change": True, "mute_on_tx": False, "follow": "auto",
              "control": "radio", "dry_run": False, "diag": False},
@@ -124,6 +132,7 @@ def snapshot(st):
         "follow": st.follow,
         "control": st.control,
         "source": st.source,
+        "radio_name": getattr(st.cat, "radio_name", None),   # SDR Console's NA; answer
         "control_note": st.control_note,
         "freq_hz": freq,
         "cat_mode": mode,
@@ -180,6 +189,11 @@ def build_app(cfg):
             log.info("CAT source: OmniRig, Rig %s (read-only)", cfg["omnirig"]["rig"])
             st.cat = cat = OmniRigSource(cfg["omnirig"]["rig"], on_state, on_status,
                                          follow=st.follow, on_note=on_note)
+        elif st.source == "sdrconsole":
+            sc = cfg["sdrconsole"]
+            log.info("CAT source: SDR Console on %s, %s baud (read-only)", sc["port"], sc["baud"])
+            st.cat = cat = sdrconsole.SdrConsoleSource(sc["port"], int(sc["baud"]), on_state,
+                                                       on_status, on_note=on_note)
         else:
             st.cat = cat = CatClient(cfg["cat"]["host"], cfg["cat"]["port"], on_state, on_status,
                                      follow=st.follow, control=st.control, on_note=on_note)
@@ -236,8 +250,8 @@ def build_app(cfg):
                 raise ValueError(f"control must be one of {', '.join(CONTROL_MODES)}")
         except (ValueError, KeyError, TypeError) as e:
             return web.json_response({"error": str(e)}, status=400)
-        if st.source == "omnirig" and control != "radio":
-            return web.json_response({"error": READ_ONLY}, status=400)
+        if st.source in READ_ONLY_SOURCES and control != "radio":
+            return web.json_response({"error": READ_ONLY_SOURCES[st.source]}, status=400)
         st.control = control
         log.info("control: %s", {"radio": "radio controls Kiwi", "kiwi": "Kiwi controls radio",
                                  "both": "both ways"}[control])

@@ -344,3 +344,83 @@ def test_omnirig_source_is_read_only(monkeypatch):
         await kiwi.close()
 
     run(scenario())
+
+
+def test_sdrconsole_source_is_read_only():
+    """[cat] source = "sdrconsole", against the fake SDR Console on a TCP socket (pyserial socket://):
+    the state feed follows it, Mute on TX sees TX, Control is forced to "radio" and /api/tune never
+    moves the radio. Only IF; and NA; are ever sent."""
+    from winSync import sdrconsole
+    from tests.fake_sdrconsole import FakeSdrConsole
+
+    async def scenario():
+        fake = FakeSdrConsole()
+        await fake.start()
+        kiwi = TestServer(fake_kiwi())
+        await kiwi.start_server()
+        cfg = load_config(None)
+        cfg["server"]["urls_file"] = tempfile.mkdtemp() + "/urls.json"
+        cfg["cat"]["source"] = "sdrconsole"
+        cfg["sync"]["control"] = "both"
+        cfg["sdrconsole"]["port"] = fake.url
+        cfg["sdrconsole"]["url"] = f"http://127.0.0.1:{kiwi.port}/"
+        client = TestClient(TestServer(build_app(cfg)))
+        await client.start_server()
+        st = client.app[STATE]
+        assert st.source == "sdrconsole" and st.control == "radio"
+        assert isinstance(st.cat, sdrconsole.SdrConsoleSource)
+        assert st.target == f"http://127.0.0.1:{kiwi.port}"           # [sdrconsole] url
+        async with client.ws_connect("/_winsync/ws") as ws:
+            snap = json.loads((await ws.receive()).data)
+            while not (snap["cat_connected"] and snap["freq_hz"] and snap["radio_name"]):
+                snap = json.loads((await ws.receive(timeout=5)).data)
+            assert snap["source"] == "sdrconsole" and snap["control"] == "radio"
+            assert snap["freq_hz"] == 10_489_730_000 and snap["mode_label"] == "USB"
+            assert snap["kiwi_mode"] == "usb" and snap["band"] == "GEN" and snap["tx"] is False
+            assert snap["radio_name"] == "ADALM-PLUTO"
+            fake.set_state(tx=True)
+            while not snap["tx"]:
+                snap = json.loads((await ws.receive(timeout=5)).data)
+            fake.set_state(tx=False, mode=1)
+            while snap["tx"] or snap["kiwi_mode"] != "lsb":
+                snap = json.loads((await ws.receive(timeout=5)).data)
+        r = await client.post("/_winsync/api/control", json={"control": "kiwi"})
+        assert r.status == 400 and (await r.json())["error"] == sdrconsole.READ_ONLY
+        assert (await client.post("/_winsync/api/control", json={"control": "radio"})).status == 200
+        r = await client.post("/_winsync/api/tune", json={"freq_hz": 7_074_000, "kiwi_mode": "lsb"})
+        j = await r.json()
+        assert j["moved"] is False and j["message"] == "Radio not moved: " + sdrconsole.READ_ONLY
+        await client.close()
+        await until_closed(fake)
+        assert set(fake.received) == {"NA;", "IF;"}
+        await fake.stop()
+        await kiwi.close()
+
+    run(scenario())
+
+
+async def until_closed(fake):
+    for _ in range(100):
+        if not fake.writers:
+            return
+        await asyncio.sleep(0.02)
+    raise AssertionError("winSync did not close the SDR Console port")
+
+
+def test_sources_and_their_receivers():
+    """Thetis stays the default with [kiwi] url; SDR Console defaults to Goonhilly; an unknown
+    source is Thetis. (No server is started, so nothing is fetched.)"""
+    from winSync.server import State
+    cfg = load_config(None)
+    cfg["server"]["urls_file"] = tempfile.mkdtemp() + "/urls.json"
+    cfg["kiwi"]["url"] = "http://m0cke.proxy.kiwisdr.com:8073/"
+    assert State(cfg).source == "thetis"
+    assert State(cfg).target == "http://m0cke.proxy.kiwisdr.com:8073"
+    cfg["cat"]["source"] = "flrig"
+    assert State(cfg).source == "thetis"
+    cfg["cat"]["source"] = "omnirig"
+    assert State(cfg).target == "http://m0cke.proxy.kiwisdr.com:8073"
+    cfg["cat"]["source"] = "sdrconsole"
+    st = State(cfg)
+    assert st.source == "sdrconsole" and st.target.startswith("https://eshail.batc.org.uk")
+    assert load_config("config.toml")["cat"]["source"] == "thetis"     # the shipped default

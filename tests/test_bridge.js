@@ -197,4 +197,70 @@ function makeWebSdr() {
   assert.ok(sent.length >= 1 && sent.every((v) => v === 1));   // never unmuted
 }
 
+// Goonhilly QO-100 narrowband WebSDR (its tmp/bandinfo.js, 2026-10-28): one band, centre
+// 10,489,750 kHz, 512 kHz wide. SDR Console's 10 GHz receive frequency tunes it directly, in kHz.
+{
+  const { ps, ctx, calls } = makeWebSdr();
+  ctx.bi = [{ centerfreq: 10489750, samplerate: 512 }]; ctx.nvbands = 1; ctx.band = 0;
+  assert.strictEqual(ps.kind(), "WebSDR");
+  const r = ps.tune(10489730000, "usb", { zoomToBand: false });   // band "GEN": the page never zooms
+  assert.strictEqual(r.ok, true);
+  assert.deepStrictEqual(calls.slice(0, 3), [["setfreqb", 10489730], ["set_mode", "USB"], ["setfreq", 10489730]]);
+  assert.ok(!calls.some((c) => c[0] === "wfset"));
+  assert.deepStrictEqual({ ...ps.readback() }, { freq_hz: 10489730000, mode: "USB" });
+  for (const [k, w] of [["lsb", "LSB"], ["cw", "CW"], ["nbfm", "FM"], ["am", "AM"], ["sam", "AM"]]) {
+    assert.strictEqual(ps.tune(10489600000, k, {}).ok, true);       // SDR Console's modes -> WebSDR's five
+    assert.strictEqual(ctx.mode, w);
+  }
+  calls.length = 0;
+  const out = ps.tune(10490300000, "usb", {});                       // above the 512 kHz band
+  assert.strictEqual(out.ok, false);
+  assert.match(out.err, /10490\.300000 MHz is outside/);
+  assert.strictEqual(calls.length, 0);
+  ps.txMute(true);
+  assert.strictEqual(ctx.cb.checked, true);                          // Mute on TX on its #mutecheckbox
+  ps.txMute(false);
+  assert.strictEqual(ctx.cb.checked, false);
+}
+
+// Sockets hard-coded as "wss://" + location.host (Goonhilly's audio and waterfall) go to winSync
+// as ws:// while the page is on http. Nothing else is changed.
+function loadWithSockets(protocol) {
+  const made = [];
+  class NativeWS {
+    constructor(url, protocols) { made.push(protocols === undefined ? [url] : [url, protocols]); }
+  }
+  NativeWS.CONNECTING = 0; NativeWS.OPEN = 1; NativeWS.CLOSING = 2; NativeWS.CLOSED = 3;
+  const ctx = { console, WebSocket: NativeWS, location: { protocol, host: "127.0.0.1:8090" } };
+  ctx.window = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "static", "bridge.js"), "utf8"), ctx);
+  return { ctx, made, NativeWS };
+}
+{
+  const { ctx, made, NativeWS } = loadWithSockets("http:");
+  const run = (js) => vm.runInContext(js, ctx);
+  const ws = run('new WebSocket("wss://" + window.location.host + "/~~stream?v=11")');
+  run('new WebSocket("wss://" + window.location.host + "/~~waterstream0?format=9&width=1024")');
+  run('new WebSocket("wss://127.0.0.1:8090")');
+  run('new WebSocket("ws://127.0.0.1:8090/ws/kiwi/1/SND")');            // a Kiwi: already ws
+  run('new WebSocket("wss://other.example.org/x")');                    // another host: left alone
+  run('new WebSocket("wss://127.0.0.1:80901/x")');                      // not the same port
+  run('new WebSocket("wss://127.0.0.1:8090/p", ["chat"])');
+  assert.deepStrictEqual(made.map((m) => m[0]), [
+    "ws://127.0.0.1:8090/~~stream?v=11", "ws://127.0.0.1:8090/~~waterstream0?format=9&width=1024",
+    "ws://127.0.0.1:8090", "ws://127.0.0.1:8090/ws/kiwi/1/SND", "wss://other.example.org/x",
+    "wss://127.0.0.1:80901/x", "ws://127.0.0.1:8090/p"]);
+  assert.strictEqual(JSON.stringify(made[6][1]), '["chat"]');       // protocols passed on
+  assert.ok(ws instanceof NativeWS);
+  assert.strictEqual(run("!!WebSocket.CLOSING"), true);                 // websdr-base.js checks this
+  assert.strictEqual(run("WebSocket.OPEN"), 1);
+}
+{
+  const { ctx, made, NativeWS } = loadWithSockets("https:");             // page on https: untouched
+  assert.strictEqual(ctx.WebSocket, NativeWS);
+  vm.runInContext('new WebSocket("wss://127.0.0.1:8090/~~stream")', ctx);
+  assert.deepStrictEqual(made, [["wss://127.0.0.1:8090/~~stream"]]);
+}
+
 console.log("bridge tests passed");

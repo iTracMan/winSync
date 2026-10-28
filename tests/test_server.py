@@ -424,3 +424,80 @@ def test_sources_and_their_receivers():
     st = State(cfg)
     assert st.source == "sdrconsole" and st.target.startswith("https://eshail.batc.org.uk")
     assert load_config("config.toml")["cat"]["source"] == "thetis"     # the shipped default
+
+
+def fake_websdr_at_nb():
+    """Laid out like Goonhilly's QO-100 WebSDR: the page at /nb/, scripts and band table below it,
+    but the sockets and /~~ requests at the site root, and something else entirely at /."""
+    app = web.Application()
+
+    async def landing(request):
+        return web.Response(text="<html><head></head><body>project page</body></html>",
+                            content_type="text/html")
+
+    async def nb(request):
+        return web.Response(text='<html><head><script src="tmp/bandinfo.js"></script></head>'
+                                 '<body>websdr</body></html>', content_type="text/html")
+
+    async def bandinfo(request):
+        return web.Response(text="var nbands=1;", content_type="application/javascript")
+
+    async def others(request):
+        return web.Response(text="ok")
+
+    async def stream(request):
+        w = web.WebSocketResponse()
+        await w.prepare(request)
+        async for msg in w:
+            await w.send_str("audio:" + msg.data)
+        return w
+
+    app.router.add_get("/", landing)
+    app.router.add_get("/nb/", nb)
+    app.router.add_get("/nb/tmp/bandinfo.js", bandinfo)
+    app.router.add_get("/~~othersjj", others)
+    app.router.add_get("/~~stream", stream)
+    return app
+
+
+def test_page_target_keeps_the_path():
+    from winSync.proxy import page_target
+    assert page_target("https://eshail.batc.org.uk/nb/") == (
+        "https://eshail.batc.org.uk", "/nb/", "https://eshail.batc.org.uk/nb/")
+    assert page_target("eshail.batc.org.uk/nb/?x=1#y") == (
+        "http://eshail.batc.org.uk", "/nb/", "http://eshail.batc.org.uk/nb/")
+    # Kiwi and plain WebSDR URLs: exactly as before, the bare origin
+    for url in ("http://m0cke.proxy.kiwisdr.com:8073/", "m0cke.proxy.kiwisdr.com:8073",
+                "http://m0cke.proxy.kiwisdr.com:8073/?f=7074usb"):
+        assert page_target(url) == ("http://m0cke.proxy.kiwisdr.com:8073", "/",
+                                    "http://m0cke.proxy.kiwisdr.com:8073")
+    assert load_config(None)["sdrconsole"]["url"] == "https://eshail.batc.org.uk/nb/"
+
+
+def test_websdr_below_the_root_is_proxied_at_its_path():
+    async def scenario():
+        sdr = TestServer(fake_websdr_at_nb())
+        await sdr.start_server()
+        kiwi, client = await make_stack(1)
+        origin = f"http://127.0.0.1:{sdr.port}"
+        r = await client.post("/_winsync/api/target", json={"url": origin + "/nb/"})
+        assert await r.json() == {"target": origin, "page": origin + "/nb/", "path": "/nb/"}
+        cfg = await (await client.get("/_winsync/api/config")).json()
+        assert (cfg["target"], cfg["page"], cfg["path"]) == (origin, origin + "/nb/", "/nb/")
+        page = await (await client.get("/nb/", headers={"Sec-Fetch-Dest": "iframe"})).text()
+        assert "/_winsync/static/bridge.js" in page and "websdr" in page
+        assert await (await client.get("/nb/tmp/bandinfo.js")).text() == "var nbands=1;"
+        assert await (await client.get("/~~othersjj")).text() == "ok"     # root paths still proxied
+        async with client.ws_connect("/~~stream") as ws:                  # the page's ws:// socket
+            await ws.send_str("hi")
+            assert (await ws.receive()).data == "audio:hi"
+        # Back to a Kiwi: path "/" again, and the reply is as before
+        r = await client.post("/_winsync/api/target", json={"url": f"http://127.0.0.1:{kiwi.port}/"})
+        assert (await r.json())["path"] == "/"
+        assert (await r.json())["page"] == f"http://127.0.0.1:{kiwi.port}"
+        assert (await client.post("/_winsync/api/target", json={"url": 5})).status == 400
+        await client.close()
+        await kiwi.close()
+        await sdr.close()
+
+    run(scenario())

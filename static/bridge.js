@@ -15,8 +15,31 @@
 //   iscw(), lo, hi           CW carrier is offset by the passband centre
 //   bi[], allloadeddone, waitingforwaterfalls   band table / start-up state
 //   setmute(0|1), #mutecheckbox   audio mute; wfset(4) zooms the waterfall fully out
+// and, through winSync on 2026-10-28, the Goonhilly QO-100 narrowband WebSDR
+// (https://eshail.batc.org.uk/nb/): page at /nb/, sockets "wss://" + location.host + "/~~stream"
+// and "/~~waterstream<band>" (see the WebSocket wrapper below), one band 10,489,750 kHz +/- 256 kHz.
 (function () {
   "use strict";
+
+  // Some WebSDRs hard-code "wss://" + location.host for their sockets (e.g. Goonhilly's QO-100
+  // WebSDR: /~~stream for audio, /~~waterstream for the waterfall). Through winSync the page is on
+  // plain http, so those must be ws:// to winSync, which then connects to the receiver with wss.
+  // Only sockets to winSync's own address are changed, and only on an http page. This script is
+  // injected at the top of <head>, before the receiver's own scripts run.
+  (function () {
+    if (typeof location === "undefined" || location.protocol !== "http:" ||
+        typeof window.WebSocket !== "function") return;
+    var Native = window.WebSocket, own = "wss://" + location.host;
+    function WebSocket(url, protocols) {
+      if (typeof url === "string" && url.indexOf(own) === 0 && /^($|[\/?#])/.test(url.slice(own.length))) {
+        url = "ws://" + url.slice("wss://".length);
+      }
+      return protocols === undefined ? new Native(url) : new Native(url, protocols);
+    }
+    WebSocket.prototype = Native.prototype;
+    ["CONNECTING", "OPEN", "CLOSING", "CLOSED"].forEach(function (k) { WebSocket[k] = Native[k]; });
+    window.WebSocket = WebSocket;
+  })();
 
   // Kiwi silently turns unknown modes into "am", so validate ourselves.
   var MODES = ["am", "amn", "amw", "sam", "sal", "sau", "sas", "qam", "drm",

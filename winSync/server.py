@@ -15,7 +15,7 @@ from .cat import CONTROL_MODES, FOLLOW_MODES, CatClient
 from .omnirig import READ_ONLY, OmniRigSource
 from . import sdrconsole
 from .modes import THETIS_LABELS, kiwi_to_thetis, thetis_to_kiwi
-from .proxy import SESSION, normalize_target, proxy_http, proxy_ws
+from .proxy import SESSION, page_target, proxy_http, proxy_ws
 
 log = logging.getLogger("winSync")
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -84,7 +84,8 @@ class State:
         self.cat = None
         # SDR Console (QO-100) has a receiver of its own; the others use [kiwi] url
         url = (self.source == "sdrconsole" and cfg["sdrconsole"].get("url")) or cfg["kiwi"]["url"]
-        self.target = normalize_target(url) if url else None
+        # target: origin the proxy serves at the root; page / path: where the receiver page is
+        self.target, self.path, self.page = page_target(url) if url else (None, "/", None)
         self.urls_file = urls_path(cfg)
         self.urls = load_urls(self.urls_file)
 
@@ -168,8 +169,11 @@ def build_app(cfg):
 
     def on_state(freq, mode, tx, vfo, rx2_on):
         st.freq_hz, st.cat_mode, st.tx, st.vfo, st.rx2_on = freq, mode, tx, vfo, rx2_on
-        log.info("radio: RX%d (VFO %s) %s Hz %s %s%s", vfo + 1, "B" if vfo else "A", freq,
-                 THETIS_LABELS.get(mode, mode), "TX" if tx else "RX", "" if rx2_on else ", RX2 off")
+        if st.source == "sdrconsole":            # one receiver, no VFOs
+            log.info("radio: %s Hz %s %s", freq, THETIS_LABELS.get(mode, mode), "TX" if tx else "RX")
+        else:
+            log.info("radio: RX%d (VFO %s) %s Hz %s %s%s", vfo + 1, "B" if vfo else "A", freq,
+                     THETIS_LABELS.get(mode, mode), "TX" if tx else "RX", "" if rx2_on else ", RX2 off")
         asyncio.create_task(broadcast(st))
 
     def on_status(connected):
@@ -222,8 +226,8 @@ def build_app(cfg):
         return ws
 
     async def get_config(request):
-        return web.json_response({"target": st.target, "sync": cfg["sync"], "cat": cfg["cat"],
-                                  "source": st.source})
+        return web.json_response({"target": st.target, "page": st.page, "path": st.path,
+                                  "sync": cfg["sync"], "cat": cfg["cat"], "source": st.source})
 
     async def set_follow(request):
         if not same_origin(request):
@@ -309,11 +313,11 @@ def build_app(cfg):
         if not same_origin(request):
             raise web.HTTPForbidden()
         try:
-            st.target = normalize_target((await request.json())["url"])
-        except (ValueError, KeyError, json.JSONDecodeError) as e:
+            st.target, st.path, st.page = page_target((await request.json())["url"])
+        except (ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError) as e:
             return web.json_response({"error": str(e)}, status=400)
-        log.info("Kiwi target set to %s", st.target)
-        return web.json_response({"target": st.target})
+        log.info("Kiwi target set to %s", st.page)
+        return web.json_response({"target": st.target, "page": st.page, "path": st.path})
 
     async def get_urls(request):
         return web.json_response({"urls": st.urls})

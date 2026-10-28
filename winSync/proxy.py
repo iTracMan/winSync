@@ -39,6 +39,20 @@ def normalize_target(url):
     return str(u.origin())
 
 
+def page_target(url):
+    """A user-entered receiver URL -> (origin for the proxy, path of the receiver page, page URL).
+    The whole site is proxied at the root (WebSDR pages use root paths such as /~~stream even when
+    the page itself is elsewhere), but the page may live below it, e.g. Goonhilly's QO-100 WebSDR at
+    https://eshail.batc.org.uk/nb/. No query string: Kiwi appends the page's query to its WebSocket
+    URLs. With path "/" the page URL is the bare origin, as before."""
+    origin = normalize_target(url)
+    url = url.strip()
+    path = URL(url if "://" in url else "http://" + url).raw_path or "/"
+    if not path.startswith("/"):
+        path = "/" + path
+    return origin, path, origin if path == "/" else origin + path
+
+
 def inject_bridge(html):
     """Insert the bridge script tag into a Kiwi HTML page."""
     m = _HEAD_RE.search(html)

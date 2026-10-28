@@ -321,14 +321,16 @@ async function connectKiwi(url) {
   });
   const j = await r.json();
   if (!r.ok) { setMsg(j.error || "Bad Kiwi URL", true); return; }
-  try { localStorage.setItem("winSync.kiwi", j.target); } catch (e) { /* storage may be blocked */ }
-  rememberUrl(j.target);
-  $("kiwi-url").value = j.target;
+  const page = j.page || j.target;          // with its path, e.g. https://eshail.batc.org.uk/nb/
+  try { localStorage.setItem("winSync.kiwi", page); } catch (e) { /* storage may be blocked */ }
+  rememberUrl(page);
+  $("kiwi-url").value = page;
   lastApplied = null;
   force = true;
   // No query string: Kiwi appends the page's query to its WebSocket URLs. Assigning src again
-  // re-navigates, giving a fresh Kiwi session; bridge.js is injected by the proxy.
-  frame.src = "/";
+  // re-navigates, giving a fresh Kiwi session; bridge.js is injected by the proxy. The whole site is
+  // proxied at the root; the receiver page itself may be below it (a WebSDR at /nb/).
+  frame.src = j.path || "/";
 }
 
 $("kiwi-form").addEventListener("submit", (e) => {
@@ -383,7 +385,7 @@ frame.addEventListener("load", () => {
   await loadUrlsFromServer();
   let saved = null;
   try { saved = localStorage.getItem("winSync.kiwi"); } catch (e) { /* ignore */ }
-  const initial = cfg.target || saved;
+  const initial = cfg.page || cfg.target || saved;
   if (initial) { $("kiwi-url").value = initial; connectKiwi(initial); }
   connectWs();
   setInterval(() => { apply(); render(); }, APPLY_INTERVAL_MS);

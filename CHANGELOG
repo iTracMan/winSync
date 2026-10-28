@@ -1,6 +1,46 @@
 winSync CHANGELOG
 =================
 
+2026-10-28 - v1.3: SDR Console (QO-100) as a third, read-only radio source
+------------------------------------------------------------------------
+Added
+  * SDR Console as a read-only source: [cat] source = "sdrconsole", a new [sdrconsole] section
+    (port = "COM23", baud = 57600, url), --source sdrconsole, and "SDR Console" in the window's Radio
+    selector. winSync/sdrconsole.py reads SDR Console's CAT serial port (Kenwood TS-2000 subset) over a
+    com0com pair with pyserial (now in requirements.txt): NA; once for the radio name, then IF; about 10
+    times a second for frequency, TX (IF[28]) and mode (IF[29]).
+  * Only FA; IF; MD; NA; can ever be written (SafePort / check_command). In SDR Console TX; and RX; switch
+    to transmit and receive; they are refused like everything else, and a test tries every other
+    two-letter command, bare and with parameters.
+  * Mute on TX from IF[28]. If SDR Console stops answering or the port goes during TX, winSync unmutes.
+  * Clear messages when COM23 doesn't exist, is in use, or SDR Console doesn't answer (e.g. COM22 not
+    ticked). COM23 is opened only while the source runs and closed when winSync stops, including when
+    the window closes.
+  * The page shows "SDR Console: connected (name)", "RX" instead of a VFO, and always says "SDR Console
+    is read-only: tuning the receiver doesn't move the radio"; Control and Follow are greyed out.
+  * With SDR Console the receiver defaults to the Goonhilly QO-100 narrowband WebSDR
+    (https://eshail.batc.org.uk/nb/). Thetis and OmniRig still use [kiwi] url (M0CKE Kiwi).
+  * tests/fake_sdrconsole.py (over TCP via pyserial socket://, or on a COM port), tests/test_sdrconsole.py,
+    tests/test_page_sources.js, and server, window and launcher tests.
+Changed
+  * A receiver URL keeps its path (https://eshail.batc.org.uk/nb/): the whole site is still proxied at
+    the root, and the page opens the receiver at its path. URLs at the root behave exactly as before.
+    /api/target and /api/config also return "page" and "path"; "target" is still the bare origin.
+  * bridge.js: on winSync's plain http page, sockets to "wss://" + winSync's own address become ws://
+    (Goonhilly hard-codes wss:// for audio and waterfall); winSync connects upstream with wss. Other
+    hosts, ws:// sockets and https pages are untouched.
+  * Control forced to "radio" and /api/control refused now apply to every read-only source (OmniRig as
+    before, same message).
+  * winSync.cmd also checks for pyserial, so a v1.2 install runs the setup once by itself and gets it.
+Verified, with the fake SDR Console only (no radio), 2026-10-28
+  * The real Goonhilly page through winSync in headless Edge: /nb/ loads with the bridge, is detected as
+    a WebSDR, becomes ready and was tuned to 10489.730 MHz USB from the fake; its /~~stream (audio) and
+    /~~waterstream0 (waterfall) sockets were upgraded through winSync and stayed open with no upstream
+    errors.
+  * Upgrade: pyserial removed from a .venv; the new launcher check sent it to setup, which added
+    pyserial 3.5 with no questions.
+  * Not yet tested live with SDR Console and the radio.
+
 2026-10-21 - v1.2: OmniRig as a read-only source for other radios
 -----------------------------------------------------------------
 Added

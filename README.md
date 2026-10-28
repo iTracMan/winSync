@@ -10,7 +10,8 @@
 
 Keeps a [KiwiSDR](http://kiwisdr.com/) or [WebSDR](http://websdr.org/) web receiver tuned to the same
 **frequency, mode and band** as **Thetis** (tested with v2.10.3.15, MI0BOT Hermes Lite 2 build) on
-Windows 10/11. Other radios can be followed, read-only, through OmniRig (see "OmniRig" below).
+Windows 10/11. Other radios can be followed, read-only, through OmniRig (see "OmniRig" below), and so
+can SDR Console on QO-100, with the Goonhilly WebSDR as the receiver (see "SDR Console / QO-100" below).
 
 ## How it works
 
@@ -34,13 +35,17 @@ The first time, a console window sets winSync up:
 
 * it looks for Python 3.11 or newer with tkinter. If there is none it offers to install Python 3.12 with
   `winget`, for your user only (no administrator rights needed); answer **Y**;
-* it creates a private Python environment (`.venv`) in this folder and installs `aiohttp` and `pywin32`
-  (for OmniRig) into it;
+* it creates a private Python environment (`.venv`) in this folder and installs `aiohttp`, `pywin32`
+  (for OmniRig) and `pyserial` (for SDR Console) into it;
 * it puts a **winSync** shortcut on the Desktop and in the Start menu.
 
 Then the winSync window opens. Later starts go straight to the window, from either `winSync.cmd` or the
 shortcuts. If you move the folder, run `winSync.cmd --setup` (from a Command Prompt in the folder) to fix the
 shortcuts; `winSync.cmd --uninstall` removes the shortcuts and `.venv`.
+
+**Upgrading from v1.2:** replace the files and double-click `winSync.cmd` as usual. It notices that
+`pyserial` (new in v1.3) is missing, runs the setup once to add it to the existing `.venv`, and opens the
+window. Nothing to do by hand.
 
 If Windows SmartScreen asks about `winSync.cmd` the first time, choose *More info* > *Run anyway*.
 
@@ -48,8 +53,8 @@ If Windows SmartScreen asks about `winSync.cmd` the first time, choose *More inf
 
 1. Start Thetis with the TCP/IP CAT server on, then tick
    **"Thetis is running and its TCP/IP CAT server is enabled"**. Start stays greyed out until you do.
-   **Radio** (default `[cat] source` in `config.toml`) chooses Thetis or OmniRig Rig 1 / Rig 2; with
-   OmniRig the box asks you to confirm OmniRig is set up instead.
+   **Radio** (default `[cat] source` in `config.toml`) chooses Thetis, OmniRig Rig 1 / Rig 2 or SDR
+   Console; with OmniRig or SDR Console the box asks you to confirm that instead.
 2. Press **Start winSync**. Its output scrolls in the field below; **Stop winSync** stops it.
    **Control** (below the Start button, default `[sync] control` in `config.toml`) chooses two-way sync
    when winSync starts: Radio controls Kiwi, Kiwi controls radio or Both. While winSync runs it is
@@ -66,7 +71,9 @@ the window says so.
 The page connects to `[kiwi] url` from `config.toml` (default `http://m0cke.proxy.kiwisdr.com:8073/`), or
 enter another Kiwi or WebSDR URL and press **Connect**. Click once inside the Kiwi to start audio (browser
 autoplay rules); on a WebSDR click its green audio start button. Receiver URLs you connect to are kept in the
-drop-down list and saved in `%APPDATA%\winSync\urls.json`.
+drop-down list and saved in `%APPDATA%\winSync\urls.json`. With **Radio: SDR Console** the page connects to
+`[sdrconsole] url` instead (default the Goonhilly QO-100 WebSDR). A receiver page below the root of its site,
+such as `https://eshail.batc.org.uk/nb/`, keeps its path.
 
 ## Behaviour notes
 
@@ -228,13 +235,95 @@ from MOX only. Modes Thetis has no Kenwood code for (SAM, DSB, SPEC, DRM) are re
 Kiwi goes to USB. The `[INIT]` command `AI0;` (auto-information off) is refused with `?;` unless Thetis
 allows Kenwood frequency broadcasts, and changes nothing else.
 
+## SDR Console / QO-100 (read-only)
+
+winSync can follow **SDR Console** (v3.4; tested with an Adalm Pluto Plus on QO-100) and keep the
+**Goonhilly QO-100 narrowband WebSDR** (<https://eshail.batc.org.uk/nb/>, BATC / AMSAT-UK, PA3FWM WebSDR
+software) on SDR Console's receive frequency and mode, with Mute on TX.
+
+1. Create a com0com virtual serial pair for SDR Console, e.g. **COM22 <-> COM23** (com0com 2.2.2.0, *emulate
+   baud rate* on). This is a separate pair from the COM20 <-> COM21 pair used for Thetis's CAT1 / OmniRig;
+   leave that one alone.
+2. In SDR Console: **Program Options > Controllers > CAT (Serial Port) > Port Selection**, tick **COM22**.
+   (57,600 baud, SDR Console's default for a virtual port.)
+3. In the winSync window choose **Radio: SDR Console**, tick the box and press **Start winSync**. winSync
+   opens the other end, **COM23**, only while it runs, and closes it when you stop winSync or close the
+   window.
+
+```toml
+[cat]
+source = "sdrconsole"
+
+[sdrconsole]
+port = "COM23"                            # winSync's end of the pair
+baud = 57600
+url = "https://eshail.batc.org.uk/nb/"   # the receiver used with SDR Console
+```
+
+(`--source sdrconsole` on the command line.) Thetis and OmniRig keep using `[kiwi] url`.
+
+* **Read-only, always.** winSync only ever sends `FA;`, `IF;`, `MD;` and `NA;` (in practice `NA;` once, for
+  the radio name on the page, then `IF;` about 10 times a second). `winSync/sdrconsole.py` refuses
+  anything else, and a test tries every other two-letter command, bare and with parameters. This
+  matters: **in SDR Console `TX;` switches to transmit and `RX;` to receive**; they are not status
+  reads, and `FA…;` / `MD…;` with a value change the radio. So two-way sync is off with SDR Console:
+  Control is fixed to *Radio controls Kiwi*, the page's Control and Follow selectors are greyed out, and
+  the page always says "SDR Console is read-only: tuning the receiver doesn't move the radio".
+* SDR Console has auto-information always off, so winSync polls. One `IF;` reply carries all three
+  values: e.g. `IF104897300000000+0000000000020000000;` is 10,489,730,000 Hz (characters 2–12, counting
+  from 0), receiving (character 28: `0` RX, `1` TX), USB (character 29). The frequency is SDR Console's
+  10 GHz receive frequency, so no offset is needed, and it stays there while transmitting.
+* Modes (SDR Console's mode digit → shown on the page → Kiwi → WebSDR). Only LSB and USB have been seen
+  live so far; the rest follow SDR Console's documentation:
+
+  | SDR Console | Page | Kiwi | WebSDR |
+  |---|---|---|---|
+  | 1 LSB | LSB | lsb | LSB |
+  | 2 USB | USB | usb | USB |
+  | 3 CW (upper) | CWU | cw | CW |
+  | 7 CW (lower) | CWL | cw | CW |
+  | 4 FM | FM | nbfm | FM |
+  | 8 Wide FM | FM | nbfm | FM |
+  | 9 Broadcast FM | FM | nbfm | FM |
+  | 0 DSB | DSB | am | AM |
+  | 5 SAM | SAM | sam | AM |
+  | 6 (not used) | — | not tuned, the page says why | — |
+
+  A `[modes]` table in `config.toml` changes the Kiwi side as for Thetis (keys are the Thetis mode
+  numbers listed there: DSB 2, SAM 10, FM 5, CWU 4, CWL 3).
+* **Mute on TX** follows `IF;` character 28, polled about 10 times a second, as for Thetis. If SDR Console
+  stops answering for 3 s, or COM23 goes away, during a transmission, winSync treats it as receiving and
+  unmutes. (The 1 s "after TX" hold-off in Behaviour notes is for two-way sync, which SDR Console doesn't
+  have.) Through the satellite and the WebSDR's own audio buffer you may still hear the very end of your
+  own signal after you return to receive.
+* The page shows **SDR Console: connected (name)**, with the name from `NA;` (the reply's exact form was not
+  seen live; winSync takes whatever follows `NA`). When something is wrong it says what:
+  * *COM23 does not exist*: the com0com pair is missing, or `[sdrconsole] port` is wrong;
+  * *COM23 is in use by another program*: winSync is already running, or SDR Console was set to COM23
+    instead of COM22;
+  * *SDR Console does not answer on COM23*: SDR Console isn't running, or COM22 isn't ticked in its CAT
+    settings. winSync keeps trying and recovers by itself.
+* **Goonhilly through winSync.** Two things had to change for this WebSDR, checked against the real site
+  on 2026-10-28. Its page is at `/nb/` (the site root is the project page) while its sockets and `/~~`
+  requests are at the root, so winSync proxies the whole site and opens the page at its path. And its
+  audio and waterfall scripts open `wss://` + the page's own address, which would fail through winSync's
+  plain http page, so `bridge.js` points those (and only those) at `ws://` to winSync, which then
+  connects to Goonhilly with `wss`. Kiwis and other WebSDRs are not affected.
+* The Goonhilly WebSDR has one band, about 10489.494–10490.006 MHz (the narrowband transponder). A
+  frequency outside it is reported ("… is outside this WebSDR's bands") and skipped. 10 GHz is not one of
+  winSync's amateur bands, so the page shows the band as **GEN** and never re-zooms the waterfall.
+
+To try it without the radio, `.venv\Scripts\python.exe -m tests.fake_sdrconsole 7300` runs a fake SDR
+Console on TCP port 7300 (set `[sdrconsole] port = "socket://127.0.0.1:7300"`), or give it the free end of
+a spare com0com pair instead of a port number. Type `f 10489600000`, `m 1` (mode digit) or `tx 1` / `tx 0`.
+
 ## Running from a terminal instead
 
 ```bat
 .venv\Scripts\python.exe -m winSync            rem or: --config path\to\config.toml, --follow A|B|auto, -v
 ```
 
-`--control radio|kiwi|both` overrides `[sync] control`; `--source thetis|omnirig` and `--rig 1|2`
+`--control radio|kiwi|both` overrides `[sync] control`; `--source thetis|omnirig|sdrconsole` and `--rig 1|2`
 override `[cat] source` and `[omnirig] rig`. For testing two-way sync, `--dry-run` makes it
 decide as usual but never send anything to the radio (the log says what it would have done), and
 `--diag` makes the page log every Kiwi readback change, every time winSync tunes the Kiwi and every
@@ -249,6 +338,7 @@ node tests\test_bridge.js      rem bridge.js logic against stubbed Kiwi and WebS
 node tests\test_kiwiwatch.js   rem Kiwi -> radio change detection
 node tests\page_e2e.js         rem the real page against a real server and the fake Thetis (ports 13114, 8091)
 node tests\test_page_reconnect.js   rem the page while the winSync server is down
+node tests\test_page_sources.js     rem the page's status and read-only note for each Radio source
 ```
 
 Node.js LTS: `winget install OpenJS.NodeJS.LTS`.

@@ -96,7 +96,7 @@ function New-Shortcuts {
         $lnk.Arguments = '-m winSync.gui'
         $lnk.WorkingDirectory = $Root
         $lnk.IconLocation = (Join-Path $Root 'assets\winsync.ico') + ',0'
-        $lnk.Description = 'Keep a KiwiSDR or WebSDR tuned to Thetis'
+        $lnk.Description = 'Keep a KiwiSDR or WebSDR tuned to Thetis, OmniRig or SDR Console'
         $lnk.Save()
         Say "Shortcut: $s"
     }
@@ -135,13 +135,13 @@ if (-not (Test-Path $VenvPy)) {
     if ($LASTEXITCODE -ne 0) { Say 'Could not create .venv.' 'Red'; exit 1 }
 }
 
-Say 'Installing winSync requirements (aiohttp, pywin32)...' 'Cyan'
+Say 'Installing winSync requirements (aiohttp, pywin32, pyserial)...' 'Cyan'
 & $VenvPy -m pip install --disable-pip-version-check --quiet -r (Join-Path $Root 'requirements.txt')
 if ($LASTEXITCODE -ne 0) {
     Say 'Installing the requirements failed (is this PC online?).' 'Red'
     exit 1
 }
-& $VenvPy -c 'import aiohttp, tkinter, win32com.client'
+& $VenvPy -c 'import aiohttp, tkinter, win32com.client, serial'
 if ($LASTEXITCODE -ne 0) { Say 'The new environment is not usable.' 'Red'; exit 1 }
 
 if (-not $NoShortcuts) { New-Shortcuts }

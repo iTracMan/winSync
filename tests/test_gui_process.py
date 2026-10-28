@@ -272,3 +272,21 @@ def test_sdrconsole_source(tmp_path, monkeypatch):
     with pytest.raises(OSError):
         sp.start(control="radio", source="sdrconsole", rig=None)
     assert seen[0][-4:] == ["--control", "radio", "--source", "sdrconsole"]
+
+
+def test_launcher_checks_every_requirement():
+    """winSync.cmd runs the setup when an import fails, so a v1.2 install (no pyserial) gets pyserial
+    the next time it starts. The launcher's and setup.ps1's checks must import every requirement."""
+    import re
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    reqs = {re.split(r"[<>=]", line)[0].strip() for line in (root / "requirements.txt").read_text().splitlines()
+            if line.strip() and not line.startswith("#")}
+    assert reqs == {"aiohttp", "pywin32", "pyserial"}
+    imports = {"aiohttp": "aiohttp", "pywin32": "win32com.client", "pyserial": "serial"}
+    cmd = (root / "winSync.cmd").read_text()
+    check = re.search(r'python\.exe" -c "import ([^"]+)" >nul 2>&1 \|\| goto setup', cmd).group(1)
+    setup = re.search(r"\$VenvPy -c 'import ([^']+)'", (root / "setup.ps1").read_text()).group(1)
+    for line in (check, setup):
+        names = {n.strip() for n in line.split(",")}
+        assert {imports[r] for r in reqs} <= names and "tkinter" in names

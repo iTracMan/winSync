@@ -382,3 +382,39 @@ def test_start_remembers_the_radio(tmp_path):
     assert initial_source(tmp_path, tmp_path / "w" / "last_radio.json") == ("sdrconsole", None)
     App._toggle(app_with(("thetis", None), fail=OSError("no python")))         # did not start
     assert initial_source(tmp_path, tmp_path / "w" / "last_radio.json") == ("sdrconsole", None)
+
+
+LAUNCHER_FILES = ["setup.ps1", "requirements.txt", "config.toml", "winSync/gui.py", "static/index.html"]
+
+
+@pytest.mark.parametrize("where, files, extracted", [
+    ("temp", [], False),                   # double-clicked inside the zip: only winSync.cmd, in Temp
+    ("temp", LAUNCHER_FILES, False),       # every file, but still in a Temp folder
+    ("repo", LAUNCHER_FILES[1:], False),   # outside Temp but setup.ps1 is missing
+    ("repo", LAUNCHER_FILES, True),        # extracted properly: goes on to the setup
+])
+def test_launcher_says_to_extract_the_zip(tmp_path, where, files, extracted):
+    """winSync.cmd checks its other files are there and it isn't in a Temp folder before doing anything;
+    if not, it says to right-click the zip and choose Extract All, and stops."""
+    import shutil
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    base = tmp_path if where == "temp" else Path(tempfile.mkdtemp(dir=root, prefix="launcher-"))
+    assert ("temp" in [p.lower() for p in base.parts]) == (where == "temp")
+    try:
+        folder = base / "winSync"
+        folder.mkdir()
+        shutil.copy(root / "winSync.cmd", folder)
+        for f in files:
+            (folder / f).parent.mkdir(exist_ok=True)
+            (folder / f).write_text("exit 1\n" if f == "setup.ps1" else "")
+        out = subprocess.run(["cmd", "/c", str(folder / "winSync.cmd")], capture_output=True, text=True,
+                             stdin=subprocess.DEVNULL, timeout=60,
+                             env={**os.environ, "WINSYNC_NO_MSGBOX": "1"}).stdout
+        assert ("Right-click the winSync zip file, choose Extract All" in out) != extracted
+        assert ("winSync setup did not finish." in out) == extracted   # the stub setup.ps1 ran
+    finally:
+        if where == "repo":
+            shutil.rmtree(base)

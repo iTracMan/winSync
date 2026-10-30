@@ -13,6 +13,10 @@ Keeps a [KiwiSDR](http://kiwisdr.com/) or [WebSDR](http://websdr.org/) web recei
 Windows 10/11. Other radios can be followed, read-only, through OmniRig (see "OmniRig" below), and so
 can SDR Console on QO-100, with the Goonhilly WebSDR as the receiver (see "SDR Console / QO-100" below).
 
+> **Extract the zip first.** Right-click the winSync zip file, choose **Extract All**, then run
+> `winSync.cmd` from the extracted folder. Double-clicking `winSync.cmd` inside the zip doesn't work:
+> Windows copies only that one file to a Temp folder, so winSync shows a message saying to extract it.
+
 ## How it works
 
 * A small Python server connects to Thetis's **TCP/IP CAT server** (default here **127.0.0.1:13013**)

@@ -1,6 +1,15 @@
 winSync CHANGELOG
 =================
 
+2026-10-30 - v1.3.1: say to extract the zip when winSync.cmd is run from inside it
+----------------------------------------------------------------------------------
+Fixed
+  * Double-clicking winSync.cmd inside the zip copied only that file to a Temp folder, and the setup
+    stopped because setup.ps1 wasn't found. winSync.cmd now checks that its other files are there and
+    that it isn't in a Temp folder before doing anything; if not, a message box says to right-click the
+    zip, choose Extract All and run winSync.cmd from the extracted folder, and it stops. The README says
+    the same near the top. tests/test_gui_process.py runs the launcher in each case.
+
 2026-10-28 - v1.3: SDR Console (QO-100) as a third, read-only radio source
 ------------------------------------------------------------------------
 Added
